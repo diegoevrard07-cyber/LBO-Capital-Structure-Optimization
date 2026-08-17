@@ -637,21 +637,21 @@ def main() -> None:
     main_col, side_col = st.columns([2.1, 1.0])
     with main_col:
         with st.container(border=True):
-            st.plotly_chart(heatmap_tearsheet(opt), use_container_width=True)
+            st.plotly_chart(heatmap_tearsheet(opt), width="stretch")
     with side_col:
         with st.container(border=True):
             st.plotly_chart(cap_stack_chart(o.stack, base.entry["equity"], company.currency),
-                            use_container_width=True)
+                            width="stretch")
             st.markdown('<div class="panel-title">Sources &amp; Uses</div>', unsafe_allow_html=True)
             st.markdown(su_table_html(base.entry, o.stack, company.currency), unsafe_allow_html=True)
 
     low_left, low_right = st.columns(2)
     with low_left:
         with st.container(border=True):
-            st.plotly_chart(paydown_chart(base.yearly, o.stack), use_container_width=True)
+            st.plotly_chart(paydown_chart(base.yearly, o.stack), width="stretch")
     with low_right:
         with st.container(border=True):
-            st.plotly_chart(attribution_waterfall(base.attribution), use_container_width=True)
+            st.plotly_chart(attribution_waterfall(base.attribution), width="stretch")
 
     with st.container(border=True):
         st.markdown('<div class="panel-title">Credit statistics by year — base case</div>',
@@ -666,7 +666,7 @@ def main() -> None:
     with tab_frontier:
         st.plotly_chart(frontier_chart(res["frontier"], res["opt_mc"], res["naive_mc"],
                                        _survivable_boundary(opt, res)),
-                        use_container_width=True)
+                        width="stretch")
         st.caption(f"Frontier: {FRONTIER_MC_DRAWS:,} MC draws per leverage level at the optimum's senior mix; "
                    f"optimum uses {assumptions.mc_draws:,} draws. Fixed seed — curves comparable across levels.")
 
@@ -678,7 +678,7 @@ def main() -> None:
             ("P(DISTRESS)", fpct(mc.p_distress), "neg" if mc.p_distress > 0 else "", ""),
             ("P(IRR<0 | SURVIVE)", fpct(mc.p_negative_irr), "neg" if mc.p_negative_irr else "", ""),
         ])
-        st.plotly_chart(mc_histogram(mc), use_container_width=True)
+        st.plotly_chart(mc_histogram(mc), width="stretch")
         stress = o.stress
         comp_rows = [
             [("IRR", "muted"), (fpct(base.irr), "accent"),
@@ -703,13 +703,13 @@ def main() -> None:
             f" @ {fpct(assumptions.base_rate, 2)} BASE</div>",
             unsafe_allow_html=True,
         )
-        st.plotly_chart(covenant_chart(base.yearly), use_container_width=True)
+        st.plotly_chart(covenant_chart(base.yearly), width="stretch")
         st.markdown('<div class="panel-title">Full yearly waterfall</div>', unsafe_allow_html=True)
         show = base.yearly.copy()
         money_cols = [c for c in show.columns if c not in ("year", "covenant_breach")
                       and not c.startswith(("coverage", "leverage"))]
         show[money_cols] = show[money_cols].round(1)
-        st.dataframe(show, use_container_width=True, hide_index=True)
+        st.dataframe(show, width="stretch", hide_index=True)
 
     with tab_memo:
         st.markdown(res["memo"])
