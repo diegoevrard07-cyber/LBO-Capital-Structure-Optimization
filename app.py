@@ -30,6 +30,7 @@ from src.inputs import CompanyData, MarketAssumptions, fetch_company
 from src.memo import generate_memo
 from src.optimizer import OptimizationResult, optimize
 from src.risk import MCResult, frontier, monte_carlo
+from src.terminal import CSS
 
 st.set_page_config(page_title="StackOptimal — LBO Structure Optimizer", layout="wide")
 
@@ -48,95 +49,6 @@ STEEL = "#3d4b63"  # secondary series
 
 CCY_SYMBOLS = {"GBP": "£", "USD": "$", "EUR": "€"}
 
-
-# ---------------------------------------------------------------------------
-# CSS — density, typography, chrome removal. Plain string (braces conflict
-# with f-strings); injected once at import.
-# ---------------------------------------------------------------------------
-
-CSS = """
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
-
-html, body, .stApp, [data-testid="stAppViewContainer"] {
-    background-color: #0a0e14 !important;
-    color: #d7dce3;
-    font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace !important;
-    font-size: 12px;
-}
-
-/* kill Streamlit chrome */
-#MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"],
-.stAppDeployButton, [data-testid="stHeader"] { display: none !important; }
-
-/* density */
-.block-container { padding: 0.6rem 0.9rem 1rem !important; max-width: 100% !important; }
-[data-testid="stVerticalBlock"] { gap: 0.35rem !important; }
-[data-testid="stHorizontalBlock"] { gap: 0.5rem !important; }
-[data-testid="stVerticalBlockBorderWrapper"] {
-    background-color: #11161f !important; border: 1px solid #1f2733 !important;
-    border-radius: 2px !important; box-shadow: none !important; padding: 0.45rem 0.6rem !important;
-}
-h1, h2, h3 { font-size: 12px !important; text-transform: uppercase; letter-spacing: 0.14em;
-             color: #7d8590 !important; font-weight: 600 !important; margin: 0 !important; }
-hr { border-color: #1f2733 !important; margin: 0.4rem 0 !important; }
-
-/* sidebar */
-[data-testid="stSidebar"] { background-color: #0d1219 !important; border-right: 1px solid #1f2733; }
-[data-testid="stSidebar"] .block-container { padding: 0.6rem 0.7rem !important; }
-
-/* widgets */
-.stNumberInput input, .stTextInput input, [data-baseweb="select"] > div {
-    background-color: #0a0e14 !important; border: 1px solid #1f2733 !important;
-    border-radius: 2px !important; font-family: inherit !important; font-size: 12px !important;
-}
-.stButton button { border-radius: 2px !important; border: 1px solid #1f2733 !important;
-    background-color: #11161f !important; font-family: inherit !important;
-    text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px !important; }
-.stButton button[kind="primary"] { background-color: #ff9f1c !important; color: #0a0e14 !important;
-    border-color: #ff9f1c !important; font-weight: 700 !important; }
-[data-testid="stTabs"] button { text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px !important; }
-[data-testid="stDataFrame"] { font-family: inherit !important; }
-.stAlert { border-radius: 2px !important; font-size: 12px !important; }
-[data-testid="stExpander"] { border: 1px solid #1f2733 !important; border-radius: 2px !important; }
-
-/* --- custom terminal components --- */
-.statusbar { display: flex; justify-content: space-between; align-items: baseline;
-    border-bottom: 1px solid #1f2733; padding: 2px 2px 6px; margin-bottom: 6px;
-    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #7d8590; }
-.statusbar .brand { color: #ff9f1c; font-weight: 700; }
-.statusbar .live { color: #3fb950; }
-
-.metric-strip { display: flex; border: 1px solid #1f2733; background: #11161f;
-    border-radius: 2px; margin-bottom: 6px; }
-.metric-cell { flex: 1; padding: 7px 12px 6px; border-left: 1px solid #1f2733; min-width: 0; }
-.metric-cell:first-child { border-left: none; }
-.metric-label { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: #7d8590; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.metric-value { font-size: 21px; font-weight: 700; color: #d7dce3; line-height: 1.25;
-    font-variant-numeric: tabular-nums; white-space: nowrap; }
-.metric-value.accent { color: #ff9f1c; }
-.metric-value.pos { color: #3fb950; }
-.metric-value.neg { color: #e5484d; }
-.metric-sub { font-size: 9px; color: #7d8590; }
-
-.panel-title { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: #7d8590; margin: 2px 0 0; }
-.rec-line { font-size: 11px; letter-spacing: 0.04em; color: #d7dce3; padding: 2px 0 4px; }
-.rec-line b { color: #ff9f1c; }
-.rec-line .warn { color: #e5484d; }
-
-table.term { width: 100%; border-collapse: collapse; font-size: 11px;
-    font-variant-numeric: tabular-nums; }
-table.term th { text-align: right; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
-    color: #7d8590; font-weight: 600; padding: 3px 8px; border-bottom: 1px solid #1f2733; }
-table.term th:first-child, table.term td:first-child { text-align: left; }
-table.term td { text-align: right; padding: 3px 8px; border-bottom: 1px solid #161c26; color: #d7dce3; }
-table.term tr:hover td { background: #161c26; }
-table.term td.neg { color: #e5484d; }
-table.term td.pos { color: #3fb950; }
-table.term td.accent { color: #ff9f1c; }
-table.term td.muted { color: #7d8590; }
-"""
 
 st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)
 
@@ -195,9 +107,10 @@ def metric_strip(cells: list[tuple[str, str, str, str]]) -> None:
     st.markdown("".join(parts), unsafe_allow_html=True)
 
 
-def terminal_table(headers: list[str], rows: list[list[tuple[str, str]]]) -> str:
+def terminal_table(headers: list[str], rows: list[list[tuple[str, str]]], compact: bool = False) -> str:
     """rows: list of rows; each cell is (text, css_class). Returns HTML."""
-    out = ['<table class="term"><thead><tr>']
+    cls = "term compact" if compact else "term"
+    out = [f'<table class="{cls}"><thead><tr>']
     out += [f"<th>{esc(h)}</th>" for h in headers]
     out.append("</tr></thead><tbody>")
     for row in rows:
@@ -283,9 +196,9 @@ def cap_stack_chart(stack, equity0: float, ccy: str) -> go.Figure:
         name = t.tranche.name
         fig.add_trace(
             go.Bar(
-                y=["CAP STACK"], x=[t.amount], name=name, orientation="h",
+                y=["CAP STACK"], x=[t.amount], name=f"{name} {t.turns:.2f}×", orientation="h",
                 marker=dict(color=colors.get(name, STEEL)),
-                text=f"{name.upper()} {t.turns:.2f}×", textposition="inside",
+                text=f"{name.upper()} {t.turns:.2f}×", textposition="auto",
                 textfont=dict(size=9, color="#0a0e14"),
                 hovertemplate=f"{name}: {fmm(t.amount, ccy)} ({t.turns:.2f}×)<extra></extra>",
             )
@@ -293,13 +206,18 @@ def cap_stack_chart(stack, equity0: float, ccy: str) -> go.Figure:
     fig.add_trace(
         go.Bar(
             y=["CAP STACK"], x=[equity0], name="Sponsor equity", orientation="h",
-            marker=dict(color=STEEL), text="EQUITY", textposition="inside",
+            marker=dict(color=STEEL), text="EQUITY", textposition="auto",
             textfont=dict(size=9, color=TEXT),
             hovertemplate=f"Equity: {fmm(equity0, ccy)}<extra></extra>",
         )
     )
-    terminal_layout(fig, 150, "Capitalization at close")
-    fig.update_layout(barmode="stack", showlegend=False, bargap=0.15)
+    terminal_layout(fig, 170, "Capitalization at close")
+    # Labels that don't fit their segment are hidden (never spilled onto
+    # neighbours); the legend and hover carry the full breakdown.
+    fig.update_layout(barmode="stack", bargap=0.15,
+                      uniformtext=dict(minsize=8, mode="hide"),
+                      legend=dict(orientation="h", yanchor="top", y=-0.12, x=0,
+                                  font=dict(size=8), title=None))
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)
     return fig
@@ -438,7 +356,7 @@ def su_table_html(entry: dict, stack, ccy: str) -> str:
             (u[0], "muted" if not u_cls else u_cls), (fmm(u[1], ccy) if u[1] is not None else "", u_cls),
             (s[0], "muted" if not s_cls else s_cls), (fmm(s[1], ccy) if s[1] is not None else "", s_cls),
         ])
-    return terminal_table(["USES", "", "SOURCES", ""], rows)
+    return terminal_table(["USES", "", "SOURCES", ""], rows, compact=True)
 
 
 def credit_stats_html(yearly: pd.DataFrame, a: MarketAssumptions, ccy: str) -> str:
@@ -595,10 +513,8 @@ def main() -> None:
 
     if opt.optimum is None:
         st.error("NO ADMISSIBLE CAPITAL STRUCTURE — no leverage × mix combination is feasible in the "
-                 "base case AND survives the stressed downside. The memo names the binding constraint.")
-        with st.tabs(["IC MEMO"])[0]:
-            st.markdown(res["memo"])
-            st.download_button("Download memo (markdown)", res["memo"], "ic_memo.md")
+                 "base case AND survives the stressed downside. The IC memo page (sidebar nav) names the "
+                 "binding constraint.")
         return
 
     o = opt.optimum
@@ -658,27 +574,26 @@ def main() -> None:
                     unsafe_allow_html=True)
         st.markdown(credit_stats_html(base.yearly, assumptions, company.currency), unsafe_allow_html=True)
 
-    # ---------------- Tabs ----------------
-    tab_frontier, tab_mc, tab_detail, tab_memo = st.tabs(
-        ["EFFICIENT FRONTIER", "MONTE CARLO", "WATERFALL DETAIL", "IC MEMO"]
-    )
-
-    with tab_frontier:
+    # ---------------- Single-page detail: frontier, Monte Carlo, waterfall ----------------
+    with st.container(border=True):
         st.plotly_chart(frontier_chart(res["frontier"], res["opt_mc"], res["naive_mc"],
                                        _survivable_boundary(opt, res)),
                         width="stretch")
         st.caption(f"Frontier: {FRONTIER_MC_DRAWS:,} MC draws per leverage level at the optimum's senior mix; "
                    f"optimum uses {assumptions.mc_draws:,} draws. Fixed seed — curves comparable across levels.")
 
-    with tab_mc:
-        mc: MCResult = res["opt_mc"]
-        metric_strip([
-            ("P(COVENANT BREACH)", fpct(mc.p_breach), "neg" if mc.p_breach > 0 else "", ""),
-            ("P(EQUITY WIPEOUT)", fpct(mc.p_wipeout), "neg" if mc.p_wipeout > 0 else "", ""),
-            ("P(DISTRESS)", fpct(mc.p_distress), "neg" if mc.p_distress > 0 else "", ""),
-            ("P(IRR<0 | SURVIVE)", fpct(mc.p_negative_irr), "neg" if mc.p_negative_irr else "", ""),
-        ])
-        st.plotly_chart(mc_histogram(mc), width="stretch")
+    mc: MCResult = res["opt_mc"]
+    metric_strip([
+        ("P(COVENANT BREACH)", fpct(mc.p_breach), "neg" if mc.p_breach > 0 else "", ""),
+        ("P(EQUITY WIPEOUT)", fpct(mc.p_wipeout), "neg" if mc.p_wipeout > 0 else "", ""),
+        ("P(DISTRESS)", fpct(mc.p_distress), "neg" if mc.p_distress > 0 else "", ""),
+        ("P(IRR<0 | SURVIVE)", fpct(mc.p_negative_irr), "neg" if mc.p_negative_irr else "", ""),
+    ])
+    mc_left, mc_right = st.columns([1.6, 1.0])
+    with mc_left:
+        with st.container(border=True):
+            st.plotly_chart(mc_histogram(mc), width="stretch")
+    with mc_right:
         stress = o.stress
         comp_rows = [
             [("IRR", "muted"), (fpct(base.irr), "accent"),
@@ -694,13 +609,14 @@ def main() -> None:
             [("MAX NET LEVERAGE", "muted"), (fmult(base.yearly["leverage_ratio"].max()), ""),
              (fmult(stress.yearly["leverage_ratio"].max()) if not stress.yearly.empty else "n/a", "")],
         ]
-        st.markdown('<div class="panel-title">Base vs stressed downside</div>', unsafe_allow_html=True)
-        st.markdown(terminal_table(["", "BASE", "STRESS"], comp_rows), unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="panel-title">Base vs stressed downside</div>', unsafe_allow_html=True)
+            st.markdown(terminal_table(["", "BASE", "STRESS"], comp_rows), unsafe_allow_html=True)
 
-    with tab_detail:
+    with st.container(border=True):
         st.markdown(
             f'<div class="rec-line">BLENDED COST OF DEBT <b>{fpct(blended_rate(o.stack, assumptions.base_rate), 2)}</b>'
-            f" @ {fpct(assumptions.base_rate, 2)} BASE</div>",
+            f" @ {fpct(assumptions.base_rate, 2)} BASE &nbsp;·&nbsp; IC MEMO ON ITS OWN PAGE (SIDEBAR NAV)</div>",
             unsafe_allow_html=True,
         )
         st.plotly_chart(covenant_chart(base.yearly), width="stretch")
@@ -710,10 +626,6 @@ def main() -> None:
                       and not c.startswith(("coverage", "leverage"))]
         show[money_cols] = show[money_cols].round(1)
         st.dataframe(show, width="stretch", hide_index=True)
-
-    with tab_memo:
-        st.markdown(res["memo"])
-        st.download_button("Download memo (markdown)", res["memo"], "ic_memo.md")
 
 
 def _survivable_boundary(opt: OptimizationResult, res: dict) -> float:
