@@ -1,7 +1,7 @@
 # StackOptimal — LBO Capital-Structure Optimizer
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests](https://github.com/USER/REPO/actions/workflows/tests.yml/badge.svg)
+![Tests](https://github.com/diegoevrard07-cyber/LBO-Capital-Structure-Optimization/actions/workflows/tests.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 **StackOptimal searches the debt space to maximize sponsor IRR subject to
@@ -18,9 +18,10 @@ leverage you own.
 ![Efficient frontier](docs/img/frontier.png)
 ![Dashboard](docs/img/dashboard.png)
 
-> Screenshots: capture `docs/img/frontier.png` (the frontier chart) and
-> `docs/img/dashboard.png` (full dashboard on TSCO.L) after running the app —
-> see Quickstart.
+> Screenshots captured from a live run on TSCO.L (see the case study below).
+> To refresh them: `streamlit run app.py`, fetch a ticker, press **Run
+> optimization**, and re-capture `docs/img/frontier.png` and
+> `docs/img/dashboard.png`.
 
 ## Quickstart
 
