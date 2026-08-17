@@ -267,6 +267,9 @@ def heatmap_tearsheet(opt: OptimizationResult) -> go.Figure:
     )
     terminal_layout(fig, 430, "IRR sensitivity — total leverage × senior mix (base case, %)",)
     fig.update_layout(plot_bgcolor="#161c26")  # infeasible (NaN) cells read as dead panel
+    fig.update_layout(margin=dict(l=48, r=44, t=34, b=34))  # extra room so the colorbar never clips cell labels
+    fig.update_coloraxes(colorbar=dict(title=dict(text="IRR %", font=dict(size=9)), tickfont=dict(size=9),
+                                       thickness=8, outlinewidth=0, len=0.92))
     fig.update_xaxes(title=dict(text="TOTAL LEVERAGE (× EBITDA)", font=dict(size=9)), tickfont=dict(size=8))
     fig.update_yaxes(title=dict(text="SENIOR MIX", font=dict(size=9)), tickfont=dict(size=8))
     return fig
