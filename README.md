@@ -26,11 +26,29 @@ leverage you own.
 ## Quickstart
 
 ```bash
-pip install -r requirements.txt
-streamlit run app.py        # dashboard: fetch a ticker, press "Run optimization"
-pytest                      # 11 engine tests
-python -m src.debt          # blended cost-of-debt convexity table
+# from the repo root, on the branch that contains the code
+# (until PR #1 merges:  git fetch origin && git checkout cursor/stackoptimal-build-404b)
+python3 -m pip install -r requirements.txt
+python3 -m streamlit run app.py   # dashboard: fetch a ticker, press "Run optimization"
+python3 -m pytest                 # 11 engine tests
+python3 -m src.debt               # blended cost-of-debt convexity table
 ```
+
+The `python3 -m …` form is deliberate: it works even when the `pytest` /
+`streamlit` console scripts are not on your `PATH` and when `python` is not
+aliased. On Windows, use `python` instead of `python3`.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `command not found: python` | Only `python3` exists (Linux/macOS) | Use `python3 -m …` as above |
+| `command not found: pytest` / `streamlit` | Console scripts installed to `~/.local/bin`, not on `PATH` | Use `python3 -m pytest` / `python3 -m streamlit …`, or `export PATH="$HOME/.local/bin:$PATH"` |
+| `can't open file 'app.py'` / `No module named 'src'` | Not in the repo root | `cd` to the repository root first |
+| `no tests ran` / file not found | You're on `main`; the code is on the PR branch | `git checkout cursor/stackoptimal-build-404b` (or merge the PR) |
+| `externally-managed-environment` on pip install | PEP 668 system Python | Use a venv: `python3 -m venv .venv && source .venv/bin/activate`, then the commands above |
+
+Requires Python 3.11+.
 
 ## Architecture
 
