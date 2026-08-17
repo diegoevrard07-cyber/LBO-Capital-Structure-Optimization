@@ -67,6 +67,11 @@ The pipeline mirrors how a deal team actually builds an LBO:
    naive max-IRR structure for contrast, and 5,000-draw risk analysis (growth,
    exit multiple, base-rate path) powering the efficient frontier.
 
+The dashboard is a single scrollable **deal tearsheet** (metric strip, IRR heatmap,
+cap stack, paydown, attribution, credit grid, frontier, Monte Carlo, waterfall);
+the generated IC memo lives on its own page (sidebar navigation) with a markdown
+download.
+
 ## How the optimizer works
 
 **Objective:** maximize base-case IRR. **Decision space:** total leverage (2.0× →
@@ -174,7 +179,8 @@ src/model.py      deterministic LBO engine (the core)
 src/optimizer.py  grid search + naive-vs-survivable gap
 src/risk.py       Monte Carlo + efficient frontier
 src/memo.py       IC memo generator
-app.py            terminal-styled Streamlit dashboard (tearsheet + tabs)
+app.py            terminal-styled Streamlit dashboard (single-page tearsheet)
+pages/            IC memo page (sidebar navigation)
 tests/            pytest suite (11 tests, fully offline)
 docs/             WALKTHROUGH.md, memo template, screenshots
 ```
