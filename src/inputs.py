@@ -69,12 +69,20 @@ class MarketAssumptions:
 
     # --- Rates (SONIA proxy + margins) ---
     base_rate: float = 0.0375  # SONIA proxy mid-2026; BoE Bank Rate path after 2024-25 cuts
-    senior_margin: float = 0.0350  # TLB at S+350: typical large-cap European institutional term loan
-    second_lien_margin: float = 0.0650  # S+650: ~300bp over senior is standard second-lien economics
-    mezz_rate: float = 0.1200  # 12% fixed cash-pay mezzanine (PIK toggle documented as an extension)
+    senior_margin: float = (
+        0.0350  # TLB at S+350: typical large-cap European institutional term loan
+    )
+    second_lien_margin: float = (
+        0.0650  # S+650: ~300bp over senior is standard second-lien economics
+    )
+    mezz_rate: float = (
+        0.1200  # 12% fixed cash-pay mezzanine (PIK toggle documented as an extension)
+    )
 
     # --- Capacity caps (turns of EBITDA) ---
-    senior_cap: float = 4.0  # senior capacity cap: 4.0x is the post-2022 European norm for solid credits
+    senior_cap: float = (
+        4.0  # senior capacity cap: 4.0x is the post-2022 European norm for solid credits
+    )
     second_lien_cap: float = 1.5  # +1.5x second lien on top of senior
     mezz_cap: float = 1.5  # +1.5x mezzanine on top of that; total capacity 7.0x
 
@@ -91,14 +99,22 @@ class MarketAssumptions:
     min_interest_coverage: float = 2.0  # EBITDA / cash interest >= 2.0x: standard European cov test
     leverage_covenant_headroom: float = 0.5  # opening covenant set at entry leverage + 0.5x
     leverage_stepdown: float = 0.5  # covenant steps down 0.5x/yr as the deal is expected to delever
-    leverage_floor: float = 4.0  # ...but never below 4.0x: lenders won't covenant below market leverage
+    leverage_floor: float = (
+        4.0  # ...but never below 4.0x: lenders won't covenant below market leverage
+    )
 
     # --- Deal structure ---
     hold_years: int = 5  # classic 5-year PE hold
-    exit_multiple_premium: float = 0.0  # exit = entry multiple (conservative: no multiple expansion assumed)
-    entry_premium_turns: float = 1.0  # +1.0x over market EV/EBITDA: takeover premium to win the asset
+    exit_multiple_premium: float = (
+        0.0  # exit = entry multiple (conservative: no multiple expansion assumed)
+    )
+    entry_premium_turns: float = (
+        1.0  # +1.0x over market EV/EBITDA: takeover premium to win the asset
+    )
     cash_sweep_pct: float = 0.75  # 75% of post-amort FCF sweeps to debt prepayment; 25% builds cash
-    wc_pct_of_delta_rev: float = 0.02  # working capital absorbs 2% of incremental revenue (asset-light norm)
+    wc_pct_of_delta_rev: float = (
+        0.02  # working capital absorbs 2% of incremental revenue (asset-light norm)
+    )
 
     # --- Stress case (downside underwriting) ---
     stress_growth_haircut: float = 0.20  # stressed growth = 80% of base (a 20% haircut)
@@ -107,7 +123,9 @@ class MarketAssumptions:
 
     # --- Monte Carlo ---
     mc_growth_sigma: float = 0.03  # 3pp absolute sigma on growth: ~1-in-6 chance of a 3pp miss
-    mc_multiple_sigma: float = 0.75  # 0.75x sigma on exit multiple: one standard deviation of cycle swing
+    mc_multiple_sigma: float = (
+        0.75  # 0.75x sigma on exit multiple: one standard deviation of cycle swing
+    )
     mc_rate_sigma: float = 0.01  # 1pp sigma on the base-rate path for floating tranches
     mc_draws: int = 5000  # enough draws that P5/P95 are stable to ~0.1pp
     mc_seed: int = 42  # fixed seed: a research tool must be reproducible run-to-run
@@ -168,7 +186,11 @@ def fetch_company(ticker: str) -> CompanyData:
     # A valid quote is identified by quoteType/symbol/market data; display
     # names can be stripped from a rate-limited response, so their absence
     # is a warning, not a rejection.
-    if not info or info.get("quoteType") not in ("EQUITY", "ETF", "MUTUALFUND", "INDEX") and not info.get("marketCap"):
+    if (
+        not info
+        or info.get("quoteType") not in ("EQUITY", "ETF", "MUTUALFUND", "INDEX")
+        and not info.get("marketCap")
+    ):
         raise ValueError(
             f"Ticker '{ticker}' returned no company profile — check the symbol "
             "(include the exchange suffix, e.g. 'TSCO.L' for London)."
@@ -176,7 +198,9 @@ def fetch_company(ticker: str) -> CompanyData:
 
     name = info.get("longName") or info.get("shortName") or ticker.upper()
     if "longName" not in info and "shortName" not in info:
-        warnings.append(f"Company name not returned (rate-limited response); displaying ticker '{ticker.upper()}'.")
+        warnings.append(
+            f"Company name not returned (rate-limited response); displaying ticker '{ticker.upper()}'."
+        )
     currency = info.get("financialCurrency") or info.get("currency") or "USD"
     if "financialCurrency" not in info:
         warnings.append(f"Reporting currency not disclosed; assumed {currency}.")
@@ -225,7 +249,9 @@ def fetch_company(ticker: str) -> CompanyData:
         cash = info.get("totalCash") or 0.0
         if market_cap and total_debt is not None:
             ev_ebitda = (market_cap + total_debt - cash) / ebitda
-            warnings.append("EV/EBITDA not quoted; computed as (market cap + debt - cash) / EBITDA.")
+            warnings.append(
+                "EV/EBITDA not quoted; computed as (market cap + debt - cash) / EBITDA."
+            )
         else:
             ev_ebitda = 10.0
             warnings.append(
@@ -295,7 +321,9 @@ def fetch_company(ticker: str) -> CompanyData:
         growth = 0.03
         warnings.append("Revenue history too short for a CAGR; assumed 3% nominal growth.")
     if growth > GROWTH_CAP:
-        warnings.append(f"Revenue CAGR of {growth:.0%} exceeds the {GROWTH_CAP:.0%} underwriting cap; capped.")
+        warnings.append(
+            f"Revenue CAGR of {growth:.0%} exceeds the {GROWTH_CAP:.0%} underwriting cap; capped."
+        )
         growth = GROWTH_CAP
     if growth < 0:
         warnings.append(

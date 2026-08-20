@@ -30,7 +30,9 @@ import pandas as pd
 from .debt import SizedTranche, total_debt
 from .inputs import CompanyData, MarketAssumptions
 
-MIN_VIABLE_EXIT_MULTIPLE = 0.5  # floor for stressed/MC exit multiples: below 0.5x EBITDA is not a sale, it's a liquidation
+MIN_VIABLE_EXIT_MULTIPLE = (
+    0.5  # floor for stressed/MC exit multiples: below 0.5x EBITDA is not a sale, it's a liquidation
+)
 
 
 @dataclass(frozen=True)
@@ -146,8 +148,15 @@ def run_lbo(
 
     def _fail(reason: str, yearly: pd.DataFrame) -> LBOResult:
         return LBOResult(
-            irr=None, moic=None, feasible=False, failure_reason=reason,
-            equity_wiped=False, yearly=yearly, entry=entry, exit={}, attribution={},
+            irr=None,
+            moic=None,
+            feasible=False,
+            failure_reason=reason,
+            equity_wiped=False,
+            yearly=yearly,
+            entry=entry,
+            exit={},
+            attribution={},
             case_label=case.label,
         )
 
@@ -178,18 +187,25 @@ def run_lbo(
         da = capex  # steady-state: D&A = capex keeps the asset base constant
 
         cash_open = cash
-        interest = {t.tranche.name: opening[t.tranche.name] * t.cash_rate(rate_path[year - 1]) for t in tranches}
+        interest = {
+            t.tranche.name: opening[t.tranche.name] * t.cash_rate(rate_path[year - 1])
+            for t in tranches
+        }
         total_interest = sum(interest.values())
 
         ebit = ebitda - da
-        taxes = max(0.0, (ebit - total_interest) * company.tax_rate)  # interest is deductible; no tax refunds
+        taxes = max(
+            0.0, (ebit - total_interest) * company.tax_rate
+        )  # interest is deductible; no tax refunds
         cfads = ebitda - capex - taxes - delta_wc
 
         available = cash_open + cfads
 
         # Mandatory amortization on original face, capped at the remaining balance.
         amort = {
-            t.tranche.name: min(t.tranche.amort_pct * original_face[t.tranche.name], opening[t.tranche.name])
+            t.tranche.name: min(
+                t.tranche.amort_pct * original_face[t.tranche.name], opening[t.tranche.name]
+            )
             for t in tranches
         }
         total_amort = sum(amort.values())
@@ -197,8 +213,22 @@ def run_lbo(
         debt_service = total_interest + total_amort
         if available < debt_service - 1e-9:
             rows.append(
-                _row(year, ebitda, revenue, capex, delta_wc, taxes, cfads, cash_open,
-                     interest, amort, {k: 0.0 for k in interest}, opening, available, a)
+                _row(
+                    year,
+                    ebitda,
+                    revenue,
+                    capex,
+                    delta_wc,
+                    taxes,
+                    cfads,
+                    cash_open,
+                    interest,
+                    amort,
+                    {k: 0.0 for k in interest},
+                    opening,
+                    available,
+                    a,
+                )
             )
             return _fail(
                 f"cash shortfall in year {year}: debt service of {debt_service:,.1f} "
@@ -230,7 +260,9 @@ def run_lbo(
         net_debt = sum(closing.values()) - cash
         leverage = net_debt / ebitda if ebitda > 0 else np.inf
         covenant_cap = max(
-            entry["entry_leverage"] + a.leverage_covenant_headroom - a.leverage_stepdown * (year - 1),
+            entry["entry_leverage"]
+            + a.leverage_covenant_headroom
+            - a.leverage_stepdown * (year - 1),
             a.leverage_floor,
         )
         breach: str | None = None
@@ -247,9 +279,26 @@ def run_lbo(
                 )
 
         rows.append(
-            _row(year, ebitda, revenue, capex, delta_wc, taxes, cfads, cash_open,
-                 interest, amort, sweep, closing, available, a,
-                 coverage=coverage, leverage=leverage, covenant_cap=covenant_cap, breach=breach)
+            _row(
+                year,
+                ebitda,
+                revenue,
+                capex,
+                delta_wc,
+                taxes,
+                cfads,
+                cash_open,
+                interest,
+                amort,
+                sweep,
+                closing,
+                available,
+                a,
+                coverage=coverage,
+                leverage=leverage,
+                covenant_cap=covenant_cap,
+                breach=breach,
+            )
         )
         if breach is not None:
             return _fail(breach, pd.DataFrame(rows))
@@ -257,7 +306,9 @@ def run_lbo(
     yearly = pd.DataFrame(rows)
 
     # ---------------- Exit ----------------
-    m_exit = max(m_entry + a.exit_multiple_premium - case.exit_multiple_shock, MIN_VIABLE_EXIT_MULTIPLE)
+    m_exit = max(
+        m_entry + a.exit_multiple_premium - case.exit_multiple_shock, MIN_VIABLE_EXIT_MULTIPLE
+    )
     ebitda_t = yearly["ebitda"].iloc[-1]
     ev_t = m_exit * ebitda_t
     net_debt_t = yearly["total_debt_closing"].iloc[-1] - yearly["cash_closing"].iloc[-1]
@@ -296,9 +347,16 @@ def run_lbo(
     }
 
     return LBOResult(
-        irr=irr, moic=moic, feasible=True, failure_reason=None,
-        equity_wiped=wiped, yearly=yearly, entry=entry, exit=exit_,
-        attribution=attribution, case_label=case.label,
+        irr=irr,
+        moic=moic,
+        feasible=True,
+        failure_reason=None,
+        equity_wiped=wiped,
+        yearly=yearly,
+        entry=entry,
+        exit=exit_,
+        attribution=attribution,
+        case_label=case.label,
     )
 
 

@@ -71,7 +71,9 @@ def optimize(company: CompanyData, a: MarketAssumptions) -> OptimizationResult:
     max_capacity = a.senior_cap + a.second_lien_cap + a.mezz_cap  # at mix = 1.0
     # Round to kill float dust from arange (1.0000000000000004 would otherwise
     # be a phantom grid point distinct from 1.0).
-    leverage_levels = [round(float(x), 10) for x in np.arange(LEVERAGE_MIN, max_capacity + 1e-9, LEVERAGE_STEP)]
+    leverage_levels = [
+        round(float(x), 10) for x in np.arange(LEVERAGE_MIN, max_capacity + 1e-9, LEVERAGE_STEP)
+    ]
     mixes = [round(float(x), 10) for x in np.arange(MIX_MIN, 1.0 + 1e-9, MIX_STEP)]
 
     points: list[GridPoint] = []
@@ -85,13 +87,21 @@ def optimize(company: CompanyData, a: MarketAssumptions) -> OptimizationResult:
 
             base = run_lbo(company, a, stack, base_case(company))
             if not base.feasible:
-                points.append(GridPoint(leverage, mix, stack, base, None, False, False, base.failure_reason))
+                points.append(
+                    GridPoint(leverage, mix, stack, base, None, False, False, base.failure_reason)
+                )
                 continue
 
             stress, survives = run_stress(company, a, stack)
             admissible = survives  # base is feasible here; admissible = feasible AND survives
-            failure = None if admissible else f"stress failure: {stress.failure_reason or 'equity wiped at stressed exit'}"
-            points.append(GridPoint(leverage, mix, stack, base, stress, survives, admissible, failure))
+            failure = (
+                None
+                if admissible
+                else f"stress failure: {stress.failure_reason or 'equity wiped at stressed exit'}"
+            )
+            points.append(
+                GridPoint(leverage, mix, stack, base, stress, survives, admissible, failure)
+            )
 
     grid = pd.DataFrame(
         [
@@ -112,7 +122,9 @@ def optimize(company: CompanyData, a: MarketAssumptions) -> OptimizationResult:
         ]
     )
 
-    feasible_points = [p for p in points if p.base is not None and p.base.feasible and p.base.irr is not None]
+    feasible_points = [
+        p for p in points if p.base is not None and p.base.feasible and p.base.irr is not None
+    ]
     admissible_points = [p for p in feasible_points if p.admissible]
 
     naive = max(feasible_points, key=lambda p: p.base.irr) if feasible_points else None

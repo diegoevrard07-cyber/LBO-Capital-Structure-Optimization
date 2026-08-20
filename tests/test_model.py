@@ -92,7 +92,9 @@ def test_balance_conservation_per_tranche_per_year():
             name = t.tranche.name
             opening = prev_closing[name]
             closing = row[f"balance_{name}"]
-            assert opening - row[f"amort_{name}"] - row[f"sweep_{name}"] == pytest.approx(closing, abs=1e-9)
+            assert opening - row[f"amort_{name}"] - row[f"sweep_{name}"] == pytest.approx(
+                closing, abs=1e-9
+            )
             prev_closing[name] = closing
 
 
@@ -183,9 +185,9 @@ def test_distress_probability_non_decreasing_in_leverage():
         stack = build_stack(leverage, 1.0, company.ebitda, A)
         mc = monte_carlo(company, A, stack, n=300, seed=42)
         p_distress.append(mc.p_distress)
-    assert all(b >= a - 1e-12 for a, b in zip(p_distress, p_distress[1:])), (
-        f"P(distress) not monotone in leverage: {p_distress}"
-    )
+    assert all(
+        b >= a - 1e-12 for a, b in zip(p_distress, p_distress[1:])
+    ), f"P(distress) not monotone in leverage: {p_distress}"
     assert p_distress[0] == 0.0  # 3x leverage on this credit should never distress
     assert p_distress[-1] > 0.0  # 6x leverage genuinely risks the equity
 
