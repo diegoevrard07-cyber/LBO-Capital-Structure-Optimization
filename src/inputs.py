@@ -91,6 +91,14 @@ class MarketAssumptions:
     second_lien_amort_pct: float = 0.0  # second lien is bullet-only in European practice
     mezz_amort_pct: float = 0.0  # mezzanine is bullet-only; repaid at exit/refi
 
+    # --- Revolver (RCF) ---
+    # Undrawn at close; draws only to cover a cash shortfall and is repaid
+    # FIRST from excess cash — before the term-loan sweep — as any credit
+    # agreement requires. Priced inside the TLB (it is the most senior claim).
+    revolver_commitment_turns: float = 0.5  # 0.5x EBITDA of committed liquidity backstop
+    revolver_margin: float = 0.0300  # S+300: revolvers clear ~50bp inside the TLB
+    revolver_undrawn_fee: float = 0.005  # 50bp/yr commitment fee on undrawn capacity
+
     # --- Fees (capitalized into Uses) ---
     debt_fee_pct: float = 0.025  # 2.5% OID/arrangement on debt raised (blended across tranches)
     ev_fee_pct: float = 0.015  # 1.5% of EV for advisory/legal/diligence — typical mid-market all-in
@@ -343,4 +351,36 @@ def fetch_company(ticker: str) -> CompanyData:
         tax_rate=float(tax_rate),
         growth=float(growth),
         warnings=warnings,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Bundled sample target — the default worked example, no network required.
+# ---------------------------------------------------------------------------
+
+SAMPLE_SNAPSHOT_DATE = "20 Aug 2026"
+
+
+def sample_company() -> CompanyData:
+    """Tesco plc, from a static snapshot of Yahoo Finance fundamentals.
+
+    Tesco is the textbook LBO profile: stable grocery cash flows, ~2% capex
+    intensity, low existing leverage, and a single-digit entry multiple. The
+    snapshot means the dashboard demos identically offline; pressing FETCH
+    refreshes it live. Values are the same fields ``fetch_company`` returns.
+    """
+    return CompanyData(
+        ticker="TSCO.L",
+        name="Tesco plc",
+        currency="GBP",
+        ebitda=5054.0,  # FY EBITDA, GBPmm
+        revenue=73712.0,  # FY revenue, GBPmm
+        ev_ebitda=8.95,  # market EV/EBITDA at snapshot
+        capex_pct=0.0216,  # 3yr average capex / revenue
+        tax_rate=0.254,  # 3yr average effective rate
+        growth=0.0411,  # 3yr revenue CAGR
+        warnings=[
+            f"Static snapshot of Yahoo Finance fundamentals captured {SAMPLE_SNAPSHOT_DATE} — "
+            "press FETCH COMPANY to refresh live."
+        ],
     )

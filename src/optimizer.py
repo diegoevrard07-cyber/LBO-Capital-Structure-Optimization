@@ -20,7 +20,7 @@ is the headline insight of the tool.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
@@ -143,6 +143,81 @@ def optimize(company: CompanyData, a: MarketAssumptions) -> OptimizationResult:
         leverage_levels=leverage_levels,
         mixes=mixes,
     )
+
+
+# ---------------------------------------------------------------------------
+# Two-way IRR sensitivities — the tables an IC actually stress-reads. Both
+# re-run the FULL engine per cell (never an approximation): infeasible cells
+# (covenant breach, cash default, negative entry equity) come back NaN and
+# render dark, so the tables show the feasible region's edges as well as IRR.
+# ---------------------------------------------------------------------------
+
+
+def irr_entry_exit_grid(
+    company: CompanyData,
+    a: MarketAssumptions,
+    leverage: float,
+    mix: float,
+    span: float = 2.0,
+    step: float = 0.5,
+) -> pd.DataFrame:
+    """Base-case IRR across entry multiple x exit multiple at a FIXED structure.
+
+    The pricing question: how much of the return is paying-the-right-price
+    versus selling well? Leverage is held in turns of EBITDA, so the debt
+    quantum is constant across cells and only the equity cheque moves.
+    """
+    m_entry_base = company.ev_ebitda + a.entry_premium_turns
+    m_exit_base = m_entry_base + a.exit_multiple_premium
+    entries = [round(m_entry_base + d, 10) for d in np.arange(-span, span + 1e-9, step)]
+    exits = [round(m_exit_base + d, 10) for d in np.arange(-span, span + 1e-9, step)]
+
+    rows = []
+    for m_e in entries:
+        for m_x in exits:
+            a2 = replace(
+                a,
+                entry_premium_turns=m_e - company.ev_ebitda,
+                exit_multiple_premium=m_x - m_e,
+            )
+            stack = build_stack(leverage, mix, company.ebitda, a2)
+            r = run_lbo(company, a2, stack, base_case(company))
+            irr = r.irr if r.feasible and not r.equity_wiped else np.nan
+            rows.append({"entry_multiple": m_e, "exit_multiple": m_x, "irr": irr})
+    return pd.DataFrame(rows)
+
+
+def irr_leverage_exit_grid(
+    company: CompanyData,
+    a: MarketAssumptions,
+    mix: float,
+    span: float = 2.0,
+    step: float = 0.5,
+    leverage_step: float = 0.5,
+) -> pd.DataFrame:
+    """Base-case IRR across total leverage x exit multiple at the base entry.
+
+    The structuring question: does more debt still pay if the exit de-rates?
+    Dark cells at high leverage are covenant breaches — the feasible region's
+    edge is part of the answer, not a rendering artefact.
+    """
+    m_entry = company.ev_ebitda + a.entry_premium_turns
+    m_exit_base = m_entry + a.exit_multiple_premium
+    max_capacity = a.senior_cap * mix + a.second_lien_cap + a.mezz_cap
+    levs = [
+        round(float(x), 10) for x in np.arange(LEVERAGE_MIN, max_capacity + 1e-9, leverage_step)
+    ]
+    exits = [round(m_exit_base + d, 10) for d in np.arange(-span, span + 1e-9, step)]
+
+    rows = []
+    for lev in levs:
+        stack = build_stack(lev, mix, company.ebitda, a)
+        for m_x in exits:
+            a2 = replace(a, exit_multiple_premium=m_x - m_entry)
+            r = run_lbo(company, a2, stack, base_case(company))
+            irr = r.irr if r.feasible and not r.equity_wiped else np.nan
+            rows.append({"leverage": lev, "exit_multiple": m_x, "irr": irr})
+    return pd.DataFrame(rows)
 
 
 def _boundary_check(

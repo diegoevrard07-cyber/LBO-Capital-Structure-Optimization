@@ -13,7 +13,7 @@ import pytest
 
 from src.debt import build_stack, blended_rate, total_debt
 from src.inputs import CompanyData, MarketAssumptions
-from src.model import base_case, run_lbo, run_stress
+from src.model import OperatingCase, base_case, run_lbo, run_stress
 from src.risk import monte_carlo
 
 
@@ -54,15 +54,17 @@ def test_zero_debt_matches_analytic_solution():
     equity0 = ev0 + fees
 
     # Independent hand calculation of the all-equity deal: FCF accumulates as
-    # cash (nothing to sweep against), exit equity = exit EV + cash pile.
+    # cash (nothing to sweep against), exit equity = exit EV + cash pile. The
+    # only financing cost is the commitment fee on the (never-drawn) revolver.
+    rcf_fee = A.revolver_undrawn_fee * A.revolver_commitment_turns * company.ebitda
     cash = 0.0
     for year in range(1, A.hold_years + 1):
         ebitda = company.ebitda * (1 + company.growth) ** year
         revenue = company.revenue * (1 + company.growth) ** year
         revenue_prev = company.revenue * (1 + company.growth) ** (year - 1)
         capex = company.capex_pct * revenue
-        taxes = (ebitda - capex) * company.tax_rate  # D&A = capex, no interest
-        cash += ebitda - capex - taxes - A.wc_pct_of_delta_rev * (revenue - revenue_prev)
+        taxes = (ebitda - capex - rcf_fee) * company.tax_rate  # D&A = capex; fee deductible
+        cash += ebitda - capex - taxes - rcf_fee - A.wc_pct_of_delta_rev * (revenue - revenue_prev)
     ebitda_t = company.ebitda * (1 + company.growth) ** A.hold_years
     expected_equity_t = m * ebitda_t + cash
 
@@ -231,3 +233,100 @@ def test_stress_survival_and_wipeout_flags():
     stress_res, survives_aggressive = run_stress(company, A, aggressive)
     assert not survives_aggressive
     assert (not stress_res.feasible) or stress_res.equity_wiped
+
+
+# ---------------------------------------------------------------------------
+# 8. Revolver mechanics: draws on a shortfall, repaid first from surplus —
+#    no term-loan sweep may happen while the revolver is drawn.
+# ---------------------------------------------------------------------------
+def test_revolver_draws_on_shortfall_and_is_repaid_before_the_sweep():
+    # A deep year-1 recession followed by a sharp recovery: year 1 cannot
+    # cover debt service from cash flow, so the revolver must draw; the
+    # recovery years must repay it in full BEFORE any term-loan sweep.
+    company = make_company(capex_pct=0.02)
+    stack = build_stack(6.5, 1.0, company.ebitda, A)
+    case = OperatingCase(growth=0.30, ebitda_shock_y1=0.45, label="V-shape")
+    res = run_lbo(company, A, stack, case, check_covenants=False)
+    assert res.feasible, res.failure_reason
+    y = res.yearly
+    assert y["rcf_draw"].iloc[0] > 0  # year-1 shortfall bridged by the revolver
+    assert y["rcf_repay"].sum() == pytest.approx(y["rcf_draw"].sum(), abs=1e-9)
+    for _, row in y.iterrows():
+        if row["sweep_total"] > 1e-9:  # seniority: sweep only once the RCF is clean
+            assert row["rcf_balance"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_shortfall_beyond_revolver_capacity_is_a_payment_default():
+    # The same recession with no recovery and a maximal stack: once cash and
+    # the revolver commitment are exhausted the model must fail with the
+    # specific payment-default reason, not limp on with negative cash.
+    company = make_company(capex_pct=0.02)
+    stack = build_stack(7.0, 1.0, company.ebitda, A)
+    case = OperatingCase(growth=-0.05, ebitda_shock_y1=0.50, label="L-shape")
+    res = run_lbo(company, A, stack, case, check_covenants=False)
+    assert not res.feasible
+    assert "cash shortfall" in res.failure_reason
+    assert "revolver" in res.failure_reason
+    assert (res.yearly["cash_closing"] >= -1e-9).all()  # cash never goes below zero
+
+
+# ---------------------------------------------------------------------------
+# 9. Sweep base: the sweep applies to the YEAR's excess cash flow only, so
+#    the stated retention (1 - sweep%) genuinely accumulates as cash instead
+#    of being re-swept the following year.
+# ---------------------------------------------------------------------------
+def test_sweep_applies_to_current_year_excess_cash_flow_only():
+    company = make_company()
+    stack = build_stack(4.5, 1.0, company.ebitda, A)
+    res = run_lbo(company, A, stack, base_case(company))
+    assert res.feasible, res.failure_reason
+    for _, row in res.yearly.iterrows():
+        ecf = row["cfads"] - row["interest_total"] - row["amort_total"]
+        assert row["sweep_total"] == pytest.approx(A.cash_sweep_pct * ecf, abs=1e-9)
+        assert row["cash_closing"] - row["cash_opening"] == pytest.approx(
+            (1.0 - A.cash_sweep_pct) * ecf, abs=1e-9
+        )
+
+
+# ---------------------------------------------------------------------------
+# 10. The hand-worked schedule in docs/VALIDATION.md, pinned to the penny.
+#     Every number below was computed manually (see the doc for the full
+#     arithmetic); if the engine ever drifts from them, this fails.
+# ---------------------------------------------------------------------------
+def test_engine_reproduces_hand_worked_schedule():
+    company = make_company()
+    stack = build_stack(4.5, 1.0, company.ebitda, A)
+    res = run_lbo(company, A, stack, base_case(company))
+    assert res.feasible, res.failure_reason
+
+    assert res.entry["ev"] == pytest.approx(900.0)
+    assert res.entry["fees"] == pytest.approx(24.75)
+    assert res.entry["equity"] == pytest.approx(474.75)
+
+    y1 = res.yearly.iloc[0]
+    assert y1["interest_total"] == pytest.approx(34.3750)  # 400x7.25% + 50x10.25% + 0.25 RCF fee
+    assert y1["taxes"] == pytest.approx(6.29375)  # 25% x (61.8 - 34.375 - 2.25)
+    assert y1["cfads"] == pytest.approx(54.90625)
+    assert y1["sweep_total"] == pytest.approx(12.3984375)  # 75% x (54.90625 - 34.375 - 4)
+    assert y1["balance_Senior TLB"] == pytest.approx(383.6015625)
+    assert y1["cash_closing"] == pytest.approx(4.1328125)
+
+    assert res.exit["ev"] == pytest.approx(1043.3467, abs=5e-5)
+    assert res.exit["equity"] == pytest.approx(720.0134, abs=5e-5)
+    assert res.moic == pytest.approx(1.516616, abs=1e-6)
+    assert res.irr == pytest.approx(0.08686379, abs=1e-8)
+
+
+# ---------------------------------------------------------------------------
+# 11. Deferred financing fees amortize straight-line as a tax deduction.
+# ---------------------------------------------------------------------------
+def test_financing_fees_amortize_as_a_tax_deduction():
+    company = make_company()
+    stack = build_stack(4.5, 1.0, company.ebitda, A)
+    res = run_lbo(company, A, stack, base_case(company))
+    assert res.feasible, res.failure_reason
+    y1 = res.yearly.iloc[0]
+    fee_amort = A.debt_fee_pct * total_debt(stack) / A.hold_years
+    ebit = y1["ebitda"] - y1["capex"]  # D&A = capex
+    expected_taxes = (ebit - y1["interest_total"] - fee_amort) * company.tax_rate
+    assert y1["taxes"] == pytest.approx(expected_taxes, abs=1e-9)
