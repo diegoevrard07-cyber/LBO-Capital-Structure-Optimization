@@ -26,9 +26,14 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from src.debt import blended_rate
-from src.inputs import CompanyData, MarketAssumptions, fetch_company
+from src.inputs import CompanyData, MarketAssumptions, fetch_company, sample_company
 from src.memo import generate_memo
-from src.optimizer import OptimizationResult, optimize
+from src.optimizer import (
+    OptimizationResult,
+    irr_entry_exit_grid,
+    irr_leverage_exit_grid,
+    optimize,
+)
 from src.risk import MCResult, frontier, monte_carlo
 from src.terminal import CSS
 
@@ -386,8 +391,53 @@ def frontier_chart(
         yaxis_tickformat=".0%",
         xaxis_title=dict(text="P(DISTRESS)", font=dict(size=9)),
         yaxis_title=dict(text="MEDIAN IRR", font=dict(size=9)),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.4),  # clear of the title
     )
+    return fig
+
+
+def sensitivity_heatmap(
+    grid: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    title: str,
+    x_title: str,
+    y_title: str,
+    mark: tuple[float, float] | None = None,
+) -> go.Figure:
+    """Generic two-way IRR table: annotated cells, dark = infeasible, and an
+    optional box marking the base-case cell."""
+    pivot = grid.pivot(index=y_col, columns=x_col, values="irr")
+    z = pivot.values * 100
+    text = np.where(np.isfinite(z), np.vectorize(lambda v: f"{v:.1f}")(np.nan_to_num(z)), "")
+    amber_on_dark = [[0.0, "#141a24"], [0.4, "#3a2c10"], [0.75, "#8a5a10"], [1.0, ACCENT]]
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=list(pivot.columns),
+            y=list(pivot.index),
+            text=text,
+            texttemplate="%{text}",
+            textfont=dict(size=8, color="#e8edf4"),
+            colorscale=amber_on_dark,
+            showscale=False,
+            hovertemplate=f"{x_title} %{{x:.2f}}×<br>{y_title} %{{y:.2f}}×<br>IRR %{{z:.1f}}%"
+            "<extra></extra>",
+        )
+    )
+    if mark is not None:
+        fig.add_shape(
+            type="rect",
+            x0=mark[0] - 0.25,
+            x1=mark[0] + 0.25,
+            y0=mark[1] - 0.25,
+            y1=mark[1] + 0.25,
+            line=dict(color=TEXT, width=1.5),
+        )
+    terminal_layout(fig, 330, title)
+    fig.update_layout(plot_bgcolor="#161c26")  # NaN cells (infeasible) read as dead panel
+    fig.update_xaxes(title=dict(text=x_title.upper(), font=dict(size=9)), tickformat=".1f")
+    fig.update_yaxes(title=dict(text=y_title.upper(), font=dict(size=9)), tickformat=".1f")
     return fig
 
 
@@ -567,6 +617,15 @@ def sidebar_assumptions() -> MarketAssumptions:
             "Second-lien cap (turns)", 0.0, 4.0, d.second_lien_cap, 0.25
         )
         mezz_cap = st.number_input("Mezzanine cap (turns)", 0.0, 4.0, d.mezz_cap, 0.25)
+        rcf_turns = st.number_input(
+            "Revolver commitment (turns)", 0.0, 2.0, d.revolver_commitment_turns, 0.25
+        )
+        rcf_margin = st.number_input(
+            "Revolver margin", 0.0, 0.10, d.revolver_margin, 0.0025, format="%.4f"
+        )
+        rcf_undrawn = st.number_input(
+            "Revolver undrawn fee", 0.0, 0.02, d.revolver_undrawn_fee, 0.0025, format="%.4f"
+        )
 
     with st.sidebar.expander("Covenants", expanded=False):
         min_cov = st.number_input("Min interest coverage", 1.0, 5.0, d.min_interest_coverage, 0.25)
@@ -625,6 +684,9 @@ def sidebar_assumptions() -> MarketAssumptions:
         senior_cap=senior_cap,
         second_lien_cap=second_lien_cap,
         mezz_cap=mezz_cap,
+        revolver_commitment_turns=rcf_turns,
+        revolver_margin=rcf_margin,
+        revolver_undrawn_fee=rcf_undrawn,
         min_interest_coverage=min_cov,
         leverage_covenant_headroom=headroom,
         leverage_stepdown=stepdown,
@@ -655,16 +717,17 @@ def main() -> None:
     assumptions = sidebar_assumptions()
     run_clicked = st.sidebar.button("Run optimization", type="primary")
 
-    if fetch_clicked or "company" not in st.session_state:
+    if fetch_clicked:
         try:
             with st.spinner(f"Fetching {ticker}…"):
                 st.session_state.company = cached_fetch(ticker.strip())
             st.session_state.pop("results", None)  # stale results for a different target
         except ValueError as exc:
-            st.session_state.pop("company", None)
-            status_bar("NO TARGET", "—")
-            st.error(str(exc))
-            return
+            st.error(f"{exc} — keeping the current dataset.")
+    if "company" not in st.session_state:
+        # Boot on the bundled static snapshot so the demo never depends on the
+        # network; the data-quality banner states the source and vintage.
+        st.session_state.company = sample_company()
 
     company: CompanyData = st.session_state.company
     status_bar(company.name, company.currency)
@@ -699,7 +762,7 @@ def main() -> None:
                 st.write("Scanning the leverage × mix grid (base + stress at every point)…")
                 opt = optimize(company, assumptions)
                 st.write(f"Evaluated {len(opt.grid)} structures.")
-                opt_mc = naive_mc = front = memo = None
+                opt_mc = naive_mc = front = memo = sens_ee = sens_lx = None
                 if opt.optimum is not None:
                     st.write(f"Running {assumptions.mc_draws:,}-draw Monte Carlo at the optimum…")
                     opt_mc = monte_carlo(company, assumptions, opt.optimum.stack)
@@ -709,11 +772,22 @@ def main() -> None:
                         )
                     st.write("Tracing the efficient frontier…")
                     front = frontier(company, assumptions, mix=opt.optimum.mix, n=FRONTIER_MC_DRAWS)
+                    st.write("Building the two-way sensitivity tables…")
+                    sens_ee = irr_entry_exit_grid(
+                        company, assumptions, opt.optimum.leverage, opt.optimum.mix
+                    )
+                    sens_lx = irr_leverage_exit_grid(company, assumptions, opt.optimum.mix)
                     memo = generate_memo(company, assumptions, opt, opt_mc)
                 else:
                     memo = generate_memo(company, assumptions, opt, None)
                 st.session_state.results = dict(
-                    opt=opt, opt_mc=opt_mc, naive_mc=naive_mc, frontier=front, memo=memo
+                    opt=opt,
+                    opt_mc=opt_mc,
+                    naive_mc=naive_mc,
+                    frontier=front,
+                    memo=memo,
+                    sens_ee=sens_ee,
+                    sens_lx=sens_lx,
                 )
                 status.update(label="Done.", state="complete")
         except Exception as exc:  # never show a raw stack trace to an IC
@@ -802,6 +876,11 @@ def main() -> None:
     with main_col:
         with st.container(border=True):
             st.plotly_chart(heatmap_tearsheet(opt), use_container_width=True)
+            st.caption(
+                "Takeaway: IRR rises with leverage only until the stress test and covenants "
+                "kill the cell — the bright band ends well before maximum capacity. "
+                "Dark = infeasible (hover for the reason)."
+            )
     with side_col:
         with st.container(border=True):
             st.plotly_chart(
@@ -817,9 +896,17 @@ def main() -> None:
     with low_left:
         with st.container(border=True):
             st.plotly_chart(paydown_chart(base.yearly, o.stack), use_container_width=True)
+            st.caption(
+                "Takeaway: the 75% cash sweep retires senior debt first; junior tranches are "
+                "bullets, repaid at exit."
+            )
     with low_right:
         with st.container(border=True):
             st.plotly_chart(attribution_waterfall(base.attribution), use_container_width=True)
+            st.caption(
+                "Takeaway: with no multiple expansion underwritten, all profit must come from "
+                "EBITDA growth and deleveraging — this deal does not depend on selling well."
+            )
 
     with st.container(border=True):
         st.markdown(
@@ -830,6 +917,50 @@ def main() -> None:
             credit_stats_html(base.yearly, assumptions, company.currency), unsafe_allow_html=True
         )
 
+    # ---------------- Two-way IRR sensitivities ----------------
+    m_entry_base = company.ev_ebitda + assumptions.entry_premium_turns
+    m_exit_base = m_entry_base + assumptions.exit_multiple_premium
+    sens_left, sens_right = st.columns(2)
+    with sens_left:
+        with st.container(border=True):
+            st.plotly_chart(
+                sensitivity_heatmap(
+                    res["sens_ee"],
+                    "exit_multiple",
+                    "entry_multiple",
+                    f"IRR % — entry × exit multiple at the optimized structure ({o.leverage:.2f}×)",
+                    "exit multiple",
+                    "entry multiple",
+                    mark=(m_exit_base, m_entry_base),
+                ),
+                use_container_width=True,
+            )
+            st.caption(
+                "Takeaway: every 0.5× overpaid at entry costs more IRR than 0.5× of exit "
+                "de-rating — price discipline beats exit hope. Box = base case."
+            )
+    with sens_right:
+        # The leverage axis steps 0.5×; mark the grid row nearest the optimum.
+        lev_rows = res["sens_lx"]["leverage"].unique()
+        mark_lev = float(min(lev_rows, key=lambda v: abs(v - o.leverage)))
+        with st.container(border=True):
+            st.plotly_chart(
+                sensitivity_heatmap(
+                    res["sens_lx"],
+                    "exit_multiple",
+                    "leverage",
+                    f"IRR % — leverage × exit multiple at {m_entry_base:.1f}× entry",
+                    "exit multiple",
+                    "total leverage",
+                    mark=(m_exit_base, mark_lev),
+                ),
+                use_container_width=True,
+            )
+            st.caption(
+                "Takeaway: leverage amplifies the exit multiple both ways — at de-rated exits "
+                "more debt LOWERS IRR; dark rows breach covenants in the base case. Box = optimum."
+            )
+
     # ---------------- Single-page detail: frontier, Monte Carlo, waterfall ----------------
     with st.container(border=True):
         st.plotly_chart(
@@ -839,8 +970,10 @@ def main() -> None:
             use_container_width=True,
         )
         st.caption(
-            f"Frontier: {FRONTIER_MC_DRAWS:,} MC draws per leverage level at the optimum's senior mix; "
-            f"optimum uses {assumptions.mc_draws:,} draws. Fixed seed — curves comparable across levels."
+            "Takeaway: median IRR climbs with leverage while P(distress) stays near zero, then "
+            "risk rises much faster than return — the star sits just before that turn; the naive "
+            f"max-IRR diamond sits past it. {FRONTIER_MC_DRAWS:,} MC draws per level at the "
+            f"optimum's senior mix ({assumptions.mc_draws:,} at the optimum), fixed seed."
         )
 
     mc: MCResult = res["opt_mc"]
@@ -856,6 +989,10 @@ def main() -> None:
     with mc_left:
         with st.container(border=True):
             st.plotly_chart(mc_histogram(mc), use_container_width=True)
+            st.caption(
+                "Takeaway: the distribution is asymmetric — leverage caps the downside at −100% "
+                "of a small cheque but the P5 shows how little cushion a recession leaves."
+            )
     with mc_right:
         stress = o.stress
         comp_rows = [
