@@ -23,6 +23,12 @@ full risk-return frontier, and a draft investment-committee memo.
 top, the optimizer's IRR grid as the main panel, then capital structure, debt
 paydown, and where the profit comes from.*
 
+The app boots on a bundled snapshot of Tesco plc fundamentals (captured 20 Aug
+2026, source and vintage shown in the app) so the demo needs no network; press
+**Fetch company** to refresh live or load any other ticker. The engine itself is
+validated line-by-line against a fully hand-computed LBO schedule — see
+[docs/VALIDATION.md](docs/VALIDATION.md) — and that reconciliation is pinned in CI.
+
 ## Why this exists
 
 PE returns are usually explained as "buy well, improve the business, sell well" —
@@ -49,15 +55,19 @@ The pipeline mirrors how a deal team actually builds an LBO:
 2. **Sources & uses** — the equity cheque is the plug: EV + fees − debt raised.
 3. **Multi-tranche debt** — senior TLB (SONIA + 350, capped at 4.0×), second lien
    (+650, +1.5×), mezzanine (12% fixed cash-pay, +1.5×), filled cheapest-first,
-   exactly as an arranger would place it. *PIK* ("payment in kind" — interest that
-   accrues to the balance instead of being paid in cash) is a documented extension;
-   the mezzanine here is cash-pay.
+   exactly as an arranger would place it, plus a 0.5× *revolver* (undrawn at
+   close, S+300 drawn, 50bp commitment fee) as the liquidity backstop. *PIK*
+   ("payment in kind" — interest that accrues to the balance instead of being
+   paid in cash) is a documented extension; the mezzanine here is cash-pay.
 4. **Cash-sweep waterfall** — each year: cash interest on opening balances →
-   mandatory amortization → *cash sweep* (75% of remaining free cash flow prepays
-   debt, senior-first) → residual builds balance-sheet cash.
-5. **FCF projection** — EBITDA growth, capex, cash taxes (interest is deductible),
-   working-capital drag, with covenant tests every year: *interest coverage*
-   (EBITDA ÷ cash interest ≥ 2.0×) and a stepped net-leverage covenant.
+   mandatory amortization → shortfalls covered by cash then a revolver draw →
+   revolver repaid first from surplus → *cash sweep* (75% of the year's excess
+   cash flow prepays term debt, senior-first) → the retained 25% builds
+   balance-sheet cash.
+5. **FCF projection** — EBITDA growth, capex, cash taxes (interest and
+   financing-fee amortization are deductible), working-capital drag, with
+   covenant tests every year: *interest coverage* (EBITDA ÷ cash interest ≥
+   2.0×) and a stepped net-leverage covenant.
 6. **Exit returns** — IRR and *MOIC* (multiple on invested capital: exit equity ÷
    entry equity) on the full cash-flow vector.
 7. **Attribution bridge** — equity profit decomposed exactly into EBITDA growth,
@@ -95,30 +105,32 @@ than hiding them); the stress case is one deterministic scenario, not a statemen
 about all recessions; and IRR-maximization subject to survival is a sponsor's
 objective — a lender or an LP would weight the constraints differently.
 
-![IRR sensitivity grid](docs/img/heatmap.png)
+![Two-way IRR sensitivities](docs/img/sensitivity.png)
 
-*The search space: base-case IRR at every leverage × seniority combination. Dark
-cells are structures that breach a covenant or fail the stress test — hover any cell
-for the specific reason.*
+*The two tables an IC stress-reads: IRR across entry × exit multiple at the
+optimized structure (price discipline beats exit hope), and IRR across leverage ×
+exit multiple (at de-rated exits, more debt LOWERS the return). Dark cells breach
+a covenant; the white box marks the base case.*
 
 ## Example result — Tesco plc (TSCO.L)
 
-Live fundamentals at capture: EBITDA £5,054mm, revenue £73.7bn, market EV/EBITDA
-9.0×. Entry at 10.0× (market + 1.0× premium) → EV £50,308mm.
+Fundamentals snapshot (20 Aug 2026): EBITDA £5,054mm, revenue £73.7bn, market
+EV/EBITDA 8.9×. Entry at 9.9× (market + 1.0× premium) → EV £50,287mm.
 
 | Structure | Leverage | Mix | Base IRR | MOIC | Survives stress? |
 |---|---|---|---|---|---|
 | **Optimum (survivable)** | **4.75×** | 100% senior | **10.5%** | **1.65×** | **Yes** |
-| Naive max-IRR | 6.00× | 100% senior | 11.1% | 1.69× | **No** — coverage breach, year 1 |
+| Naive max-IRR | 6.00× | 100% senior | 11.2% | 1.70× | **No** — coverage breach, year 1 |
 
 The comparison is the point of the tool: unconstrained IRR-maximization picks 6.00×
-and breaches its interest-coverage covenant in the first stressed year (1.85× vs the
-2.0× minimum). The survivable optimum gives up **0.6pp of IRR** to avoid that. At
-the optimum: Monte Carlo median IRR 10.6% (P5/P95 2.6%/18.6%), P(distress) 4.4%, and
-the £17.9bn equity profit decomposes into £11.2bn EBITDA growth + £8.0bn debt
-paydown + £0 multiple expansion − £1.4bn fees.
+and breaches its interest-coverage covenant in the first stressed year (1.84× vs the
+2.0× minimum). The survivable optimum gives up **0.7pp of IRR** to avoid that. At
+the optimum: Monte Carlo median IRR 10.7% (P5/P95 2.6%/18.7%), P(distress) 4.3%, and
+the £17.9bn equity profit decomposes into £11.2bn EBITDA growth + £8.1bn debt
+paydown + £0 multiple expansion − £1.4bn fees. The full write-up is in
+[docs/DEAL_MEMO.md](docs/DEAL_MEMO.md).
 
-*(Figures move with live market data; re-run for the current answer.)*
+*(Figures come from the bundled snapshot; fetching live data will move them.)*
 
 ![Efficient frontier](docs/img/frontier.png)
 
@@ -129,7 +141,8 @@ fails the downside test.*
 ## Skills this demonstrates
 
 - **Software engineering** — typed, modular Python (dataclasses, numpy, pandas);
-  11-test pytest suite; GitHub Actions CI; pinned, reproducible dependencies.
+  16-test pytest suite including a to-the-penny reconciliation against a
+  hand-computed schedule; GitHub Actions CI; pinned, reproducible dependencies.
 - **Financial modelling** — sources & uses, a multi-tranche debt waterfall with
   cash sweep, covenant testing, IRR/MOIC, and a value-creation bridge, built
   year-by-year the way a deal team's Excel model works.
@@ -150,9 +163,10 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The app ships pre-loaded with the Tesco (`TSCO.L`) sample configuration — press
-**Fetch company**, then **Run optimization**; the full grid scan + Monte Carlo +
-frontier takes ~20–30 seconds. Tests: `pytest` (11 engine tests, fully offline).
+The app boots on the bundled Tesco (`TSCO.L`) snapshot — just press
+**Run optimization**; the full grid scan + Monte Carlo + frontier takes ~20–30
+seconds, no network required. **Fetch company** loads live data for any ticker.
+Tests: `pytest` (16 engine tests, fully offline).
 Convexity demo: `python -m src.debt`. Requires Python 3.11+.
 
 If your shell can't find `pytest`/`streamlit` outside the venv, use the
@@ -179,8 +193,10 @@ python@3.12`), recreate the venv, and reinstall.
 
 ## Limitations & roadmap
 
-- **No revolver** — a cash shortfall is immediately fatal; extension: an RCF with
-  drawn cost and commitment fee, repaid first in the sweep.
+- **Annual granularity** — the revolver bridges year-level shortfalls; intra-year
+  working-capital swings need quarterly periods.
+- **No interest income on cash** — retained cash reduces net debt but earns
+  nothing (mildly conservative).
 - **No PIK interest** — mezzanine is cash-pay; extension: a `pik_fraction` per
   tranche, accruing to the balance and excluded from cash coverage.
 - **D&A = capex** (steady state) — extension: a depreciation schedule with lags for
@@ -195,9 +211,12 @@ python@3.12`), recreate the venv, and reinstall.
   disclosures).
 
 The full mechanism-by-mechanism write-up — waterfall mechanics, covenant practice,
-the value-creation bridge, every default's justification — is in
-[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md). The IC memo structure the app generates
-is in [docs/memo_template.md](docs/memo_template.md).
+the value-creation bridge, every default's justification, and the ten hardest
+questions a banker would ask (with answers) — is in
+[docs/WALKTHROUGH.md](docs/WALKTHROUGH.md). The hand-worked engine validation is in
+[docs/VALIDATION.md](docs/VALIDATION.md); the sample deal memo in
+[docs/DEAL_MEMO.md](docs/DEAL_MEMO.md); the IC memo structure the app generates in
+[docs/memo_template.md](docs/memo_template.md).
 
 ## Repo layout
 
@@ -210,8 +229,8 @@ src/risk.py       Monte Carlo + efficient frontier
 src/memo.py       IC memo generator
 app.py            terminal-styled Streamlit dashboard (single-page tearsheet)
 pages/            IC memo page (sidebar navigation)
-tests/            pytest suite (11 tests, fully offline)
-docs/             WALKTHROUGH.md, memo template, screenshots
+tests/            pytest suite (16 tests, fully offline, incl. hand-worked reconciliation)
+docs/             WALKTHROUGH.md, VALIDATION.md, DEAL_MEMO.md, memo template, screenshots
 ```
 
 ## Disclaimer
