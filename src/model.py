@@ -13,11 +13,19 @@ and tranche caps kink the cost of funds. No closed form survives those kinks,
 so we compute year by year — which is also exactly how a deal team builds it
 in Excel, and therefore easy to audit line by line.
 
-Conventions (UK/European): interest is cash-pay on OPENING balances and is
+Conventions (UK/European): interest is cash-pay on OPENING balances — the
+beginning-of-period convention, applied identically to every tranche and the
+revolver. This deliberately avoids the interest<->sweep circularity (interest
+on average balances would need the closing balance, which needs the sweep,
+which needs interest): it is the standard clean convention, stated up front,
+slightly conservative because the year's paydown earns no intra-year interest
+relief. Interest and the amortization of capitalized financing fees are
 tax-deductible; D&A is set equal to capex (steady-state: the asset base is
 held roughly constant, a standard underwriting shortcut); mandatory amort is
-a percentage of ORIGINAL face; the cash sweep prepays in strict seniority;
-there is no revolver, so a cash shortfall is an event of default.
+a percentage of ORIGINAL face; the cash sweep applies to the YEAR's excess
+cash flow (not the accumulated cash balance) and prepays in strict seniority.
+A revolver, undrawn at close, bridges cash shortfalls and is repaid first —
+a shortfall is fatal only once cash and the commitment are both exhausted.
 """
 
 from __future__ import annotations
@@ -173,6 +181,14 @@ def run_lbo(
     original_face = {t.tranche.name: t.amount for t in stack}
     tranches = sorted(stack, key=lambda t: t.tranche.seniority)
     cash = 0.0  # no minimum-cash funding at close — documented simplification
+    rcf_commitment = a.revolver_commitment_turns * company.ebitda
+    rcf_drawn = 0.0  # the revolver is undrawn at close (it is a backstop, not a source)
+    # Capitalized financing fees amortize straight-line over the hold as a
+    # NON-CASH tax deduction — the deferred-financing-fee treatment. The cash
+    # left the door at close (inside the equity cheque); only the tax shield
+    # arrives over time.
+    financing_fees = a.debt_fee_pct * debt0
+    fee_amort = financing_fees / n
     rows: list[dict] = []
 
     for year in range(1, n + 1):
@@ -187,19 +203,23 @@ def run_lbo(
         da = capex  # steady-state: D&A = capex keeps the asset base constant
 
         cash_open = cash
+        rcf_open = rcf_drawn
+        base_rate = rate_path[year - 1]
         interest = {
-            t.tranche.name: opening[t.tranche.name] * t.cash_rate(rate_path[year - 1])
-            for t in tranches
+            t.tranche.name: opening[t.tranche.name] * t.cash_rate(base_rate) for t in tranches
         }
-        total_interest = sum(interest.values())
+        # Revolver cost: margin on the OPENING drawn balance (same convention
+        # as every tranche) plus the commitment fee on undrawn capacity.
+        rcf_interest = rcf_open * (base_rate + a.revolver_margin) + a.revolver_undrawn_fee * (
+            rcf_commitment - rcf_open
+        )
+        total_interest = sum(interest.values()) + rcf_interest
 
         ebit = ebitda - da
         taxes = max(
-            0.0, (ebit - total_interest) * company.tax_rate
-        )  # interest is deductible; no tax refunds
+            0.0, (ebit - total_interest - fee_amort) * company.tax_rate
+        )  # interest and fee amortization are deductible; no tax refunds
         cfads = ebitda - capex - taxes - delta_wc
-
-        available = cash_open + cfads
 
         # Mandatory amortization on original face, capped at the remaining balance.
         amort = {
@@ -210,54 +230,81 @@ def run_lbo(
         }
         total_amort = sum(amort.values())
 
-        debt_service = total_interest + total_amort
-        if available < debt_service - 1e-9:
-            rows.append(
-                _row(
-                    year,
-                    ebitda,
-                    revenue,
-                    capex,
-                    delta_wc,
-                    taxes,
-                    cfads,
-                    cash_open,
-                    interest,
-                    amort,
-                    {k: 0.0 for k in interest},
-                    opening,
-                    available,
-                    a,
+        # Excess cash flow: THIS year's cash generation after debt service.
+        # The sweep applies to this, not to the accumulated cash balance —
+        # matching how credit agreements define an ECF sweep, and making the
+        # stated retention (1 - sweep%) actually hold year after year.
+        ecf = cfads - total_interest - total_amort
+
+        sweep: dict[str, float] = {t.tranche.name: 0.0 for t in tranches}
+        rcf_draw = rcf_repay = 0.0
+        if ecf < -1e-12:
+            # Shortfall: opening cash absorbs it first, then the revolver
+            # draws; only when both are exhausted is it a payment default.
+            shortfall = -ecf
+            from_cash = min(cash_open, shortfall)
+            cash = cash_open - from_cash
+            need = shortfall - from_cash
+            if need > rcf_commitment - rcf_open + 1e-9:
+                closing = {
+                    t.tranche.name: opening[t.tranche.name] - amort[t.tranche.name]
+                    for t in tranches
+                }
+                rows.append(
+                    _row(
+                        year,
+                        ebitda,
+                        revenue,
+                        capex,
+                        delta_wc,
+                        taxes,
+                        cfads,
+                        cash_open,
+                        interest,
+                        amort,
+                        sweep,
+                        closing,
+                        cash,
+                        a,
+                        rcf_interest=rcf_interest,
+                        rcf_draw=0.0,
+                        rcf_repay=0.0,
+                        rcf_balance=rcf_open,
+                    )
                 )
-            )
-            return _fail(
-                f"cash shortfall in year {year}: debt service of {debt_service:,.1f} "
-                f"exceeds available cash of {available:,.1f} (no revolver)",
-                pd.DataFrame(rows),
-            )
+                return _fail(
+                    f"cash shortfall in year {year}: debt service exceeds cash generated "
+                    f"by {shortfall:,.1f}, beyond cash on hand and the remaining "
+                    f"{rcf_commitment - rcf_open:,.1f} revolver capacity",
+                    pd.DataFrame(rows),
+                )
+            rcf_draw = need
+        else:
+            # Surplus: the revolver is repaid FIRST and in full if possible —
+            # it is the most senior claim and the cheapest to re-draw — then
+            # the sweep share of the remainder prepays term debt senior-first,
+            # and the retained share builds balance-sheet cash.
+            rcf_repay = min(rcf_open, ecf)
+            surplus = ecf - rcf_repay
+            remaining = a.cash_sweep_pct * surplus
+            for t in tranches:
+                name = t.tranche.name
+                after_amort = opening[name] - amort[name]
+                swept = min(after_amort, max(0.0, remaining))
+                sweep[name] = swept
+                remaining -= swept
+            cash = cash_open + surplus - sum(sweep.values())
 
-        # Cash sweep: a fixed share of post-debt-service cash prepays senior-first.
-        # Cash falls only by what is ACTUALLY swept — once every tranche is
-        # repaid the unspent pool stays on the balance sheet (no cash leak).
-        sweep_pool = a.cash_sweep_pct * (available - debt_service)
-        sweep: dict[str, float] = {}
-        closing: dict[str, float] = {}
-        remaining = sweep_pool
-        for t in tranches:
-            name = t.tranche.name
-            after_amort = opening[name] - amort[name]
-            swept = min(after_amort, max(0.0, remaining))
-            sweep[name] = swept
-            closing[name] = after_amort - swept
-            remaining -= swept
-
-        swept_total = sum(sweep.values())
-        cash = available - debt_service - swept_total  # the unswept residual builds liquidity
+        closing = {
+            t.tranche.name: opening[t.tranche.name] - amort[t.tranche.name] - sweep[t.tranche.name]
+            for t in tranches
+        }
+        rcf_drawn = rcf_open + rcf_draw - rcf_repay
         opening = closing
 
         # ---------------- Covenant tests ----------------
         coverage = ebitda / total_interest if total_interest > 1e-12 else np.inf
-        net_debt = sum(closing.values()) - cash
+        net_debt = sum(closing.values()) + rcf_drawn - cash
         leverage = net_debt / ebitda if ebitda > 0 else np.inf
         covenant_cap = max(
             entry["entry_leverage"]
@@ -292,8 +339,12 @@ def run_lbo(
                 amort,
                 sweep,
                 closing,
-                available,
+                cash,
                 a,
+                rcf_interest=rcf_interest,
+                rcf_draw=rcf_draw,
+                rcf_repay=rcf_repay,
+                rcf_balance=rcf_drawn,
                 coverage=coverage,
                 leverage=leverage,
                 covenant_cap=covenant_cap,
@@ -373,17 +424,20 @@ def _row(
     amort: dict[str, float],
     sweep: dict[str, float],
     closing: dict[str, float],
-    available: float,
+    cash_close: float,
     a: MarketAssumptions,
+    rcf_interest: float = 0.0,
+    rcf_draw: float = 0.0,
+    rcf_repay: float = 0.0,
+    rcf_balance: float = 0.0,
     coverage: float | None = None,
     leverage: float | None = None,
     covenant_cap: float | None = None,
     breach: str | None = None,
 ) -> dict:
     """Assemble one row of the yearly waterfall table (flat, UI-ready)."""
-    total_interest = sum(interest.values())
-    total_debt_close = sum(closing.values())
-    cash_close = available - total_interest - sum(amort.values()) - sum(sweep.values())
+    total_interest = sum(interest.values()) + rcf_interest
+    total_debt_close = sum(closing.values()) + rcf_balance
     row: dict = {
         "year": year,
         "ebitda": ebitda,
@@ -393,10 +447,13 @@ def _row(
         "taxes": taxes,
         "cfads": cfads,
         "cash_opening": cash_open,
-        "available_cash": available,
         "interest_total": total_interest,
         "amort_total": sum(amort.values()),
         "sweep_total": sum(sweep.values()),
+        "rcf_interest": rcf_interest,
+        "rcf_draw": rcf_draw,
+        "rcf_repay": rcf_repay,
+        "rcf_balance": rcf_balance,
         "cash_closing": cash_close,
         "total_debt_closing": total_debt_close,
         "net_debt_closing": total_debt_close - cash_close,

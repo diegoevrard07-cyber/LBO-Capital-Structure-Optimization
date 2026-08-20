@@ -156,6 +156,10 @@ while surviving the stressed downside.{boundary_note}
 
 {tranche_table}
 
+Plus an undrawn revolver of {a.revolver_commitment_turns:.2f}x EBITDA ({cur} {_m(a.revolver_commitment_turns * company.ebitda)}m)
+at S+{a.revolver_margin * 10000:.0f} drawn / {a.revolver_undrawn_fee * 10000:.0f}bp undrawn — the liquidity backstop,
+repaid first from excess cash.
+
 Blended cash cost of debt {sum(t.amount * t.cash_rate(a.base_rate) for t in o.stack) / e['total_debt']:.2%} at a
 {a.base_rate:.2%} base rate. Covenants: minimum interest coverage {a.min_interest_coverage:.1f}x; maximum net
 leverage opening at entry +{a.leverage_covenant_headroom:.1f}x, stepping down {a.leverage_stepdown:.1f}x/yr to a
