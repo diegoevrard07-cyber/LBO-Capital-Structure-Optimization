@@ -422,8 +422,8 @@ def run_stress(
     """Run the downside case. A structure SURVIVES iff the stressed run stays
     feasible (no covenant breach, no cash shortfall) AND the equity is not
     wiped at the stressed exit. Survival — not stressed IRR — is the bar,
-    matching how an IC underwrites downside: 'do we get our money back and
-    keep the keys?', not 'what do we make in a recession?'."""
+    matching how an IC underwrites downside: the question is whether the
+    equity survives with the company intact, not what it earns in a recession."""
     result = run_lbo(company, a, stack, stress_case(company, a))
     survives = result.feasible and not result.equity_wiped
     return result, survives

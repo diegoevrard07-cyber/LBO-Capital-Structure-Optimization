@@ -15,7 +15,7 @@ spilling into junior tranches). A structure is ADMISSIBLE iff it is feasible
 in the base case AND survives the stressed downside. The optimizer reports
 the admissible structure with the highest base-case IRR — and, separately,
 the naive unconstrained max-IRR structure, because the gap between the two
-is the headline insight: leverage you cannot survive is not leverage you own.
+is the headline insight of the tool.
 """
 
 from __future__ import annotations

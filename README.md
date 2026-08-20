@@ -24,20 +24,19 @@ the efficient frontier ([docs/img/frontier.png](docs/img/frontier.png)).*
 
 ## Why this exists
 
-I kept hearing the same claim in PE interviews and reading: that returns come from
-"buying right, improving operations, and selling well" — with the capital structure
-treated as plumbing. But the structure *is* a design choice with its own return
-stream: every turn of leverage mechanically amplifies IRR, right up to the point
-where covenants, cash adequacy, and downside fragility take the company away from
-you. I wanted to know how much of the spread between a good deal and a blown-up deal
-is decided at the financing table, before anyone touches operations.
+PE returns are usually explained as "buy well, improve the business, sell well" —
+with the debt structure treated as an afterthought. But the structure is a design
+choice with its own effect on returns: each extra turn of leverage raises IRR
+mechanically, right up to the point where covenants or a bad year hand the company
+to the lenders. I wanted to measure how much of the difference between a good deal
+and a failed one is decided by the financing, before operations enter the picture.
 
-So I built the tool I wanted to interrogate: give it a ticker, and it searches the
-whole leverage × tranche-mix space, prices each structure through a year-by-year
-debt waterfall, stress-tests it against a recession case, and shows you the gap
-between the structure that maximizes headline IRR and the structure that survives.
-That gap — usually smaller than people expect, and occasionally fatal — is the
-interesting number.
+So I built a tool to test it. Give it a ticker and it searches the leverage ×
+tranche-mix space, runs each structure through a year-by-year debt model,
+stress-tests it against a recession case, and shows the gap between the structure
+with the highest headline IRR and the structure that survives. That gap is usually
+smaller than people expect — and occasionally it is the difference between keeping
+the company and losing it.
 
 ## What it does
 
@@ -81,13 +80,13 @@ case *and* survives the stressed downside (−20% growth, a one-off −10% EBITD
 −1.0× exit multiple) with the equity intact.
 
 **Search method — grid scan, deliberately.** The debt waterfall makes the objective
-non-convex and path-dependent — covenant tests kink the feasible region, tranche-cap
-boundaries kink the cost of funds, and the cash sweep switches the mapping from this
-year's free cash flow to next year's interest bill. Gradient methods on such a
-surface silently converge to local optima and say nothing about the surrounding
-terrain. A transparent grid scan finds the global optimum over the discretized
-space, costs milliseconds per evaluation, and yields the full risk-return surface as
-a free by-product.
+non-convex and path-dependent: covenants cut whole regions out of the feasible set,
+tranche caps make each additional turn of debt more expensive than the last, and the
+cash sweep means this year's paydown changes next year's interest bill. Gradient
+methods on a surface like that can settle on local optima and say nothing about the
+rest of the space. A grid scan finds the global optimum over the discretized space,
+costs milliseconds per evaluation, and produces the full risk-return surface as a
+by-product.
 
 **Honest limitations of the approach:** the grid discretizes a continuous space, so
 the true optimum can sit between grid points (the tool flags boundary optima rather
@@ -98,19 +97,19 @@ objective — a lender or an LP would weight the constraints differently.
 ## Example result — Tesco plc (TSCO.L)
 
 Live fundamentals at capture: EBITDA £5,054mm, revenue £73.7bn, market EV/EBITDA
-9.1×. Entry at 10.1× (market + 1.0× premium) → EV £51,263mm.
+9.0×. Entry at 10.0× (market + 1.0× premium) → EV £50,308mm.
 
 | Structure | Leverage | Mix | Base IRR | MOIC | Survives stress? |
 |---|---|---|---|---|---|
-| **Optimum (survivable)** | **4.75×** | 100% senior | **10.3%** | **1.63×** | **Yes** |
-| Naive max-IRR | 6.00× | 100% senior | 10.8% | 1.72× | **No** — coverage breach, year 1 |
+| **Optimum (survivable)** | **4.75×** | 100% senior | **10.5%** | **1.65×** | **Yes** |
+| Naive max-IRR | 6.00× | 100% senior | 11.1% | 1.69× | **No** — coverage breach, year 1 |
 
-The before/after is the money shot: unconstrained IRR-maximization picks 6.00× and
-breaches its interest-coverage covenant in the first stressed year (1.85× vs the
-2.0× minimum). The survivable optimum gives up just **0.5pp of IRR** to keep the
-company. At the optimum: Monte Carlo median IRR 10.4% (P5/P95 2.5%/18.3%),
-P(distress) 4.4%, and the £18.1bn equity profit decomposes into £11.4bn EBITDA
-growth + £8.0bn debt paydown + £0 multiple expansion − £1.4bn fees.
+The comparison is the point of the tool: unconstrained IRR-maximization picks 6.00×
+and breaches its interest-coverage covenant in the first stressed year (1.85× vs the
+2.0× minimum). The survivable optimum gives up **0.6pp of IRR** to avoid that. At
+the optimum: Monte Carlo median IRR 10.6% (P5/P95 2.6%/18.6%), P(distress) 4.4%, and
+the £17.9bn equity profit decomposes into £11.2bn EBITDA growth + £8.0bn debt
+paydown + £0 multiple expansion − £1.4bn fees.
 
 *(Figures move with live market data; re-run for the current answer.)*
 
@@ -131,7 +130,10 @@ Convexity demo: `python -m src.debt`. Requires Python 3.11+.
 
 If your shell can't find `pytest`/`streamlit` outside the venv, use the
 `python3 -m …` forms (`python3 -m streamlit run app.py`, `python3 -m pytest`) — they
-work regardless of `PATH`.
+work regardless of `PATH`. If charts show a deprecation banner about "keyword
+arguments", your Streamlit is old — almost always because `python3` is older than
+3.11 (check with `python3 --version`); install a newer Python (`brew install
+python@3.12`), recreate the venv, and reinstall.
 
 ## Design decisions I'd defend in an interview
 

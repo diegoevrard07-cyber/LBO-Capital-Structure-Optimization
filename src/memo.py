@@ -1,11 +1,9 @@
 """Investment-committee memo generator.
 
-Turns the optimizer and Monte Carlo outputs into a two-page markdown memo in
-the register an IC actually reads: every number traced to a model output, the
-downside taken as seriously as the upside, and a recommendation that follows
-from the analysis rather than preceding it. If no admissible structure exists
-the memo says so plainly and names the binding constraint — a memo that
-recommends nothing is sometimes the correct memo.
+Turns the optimizer and Monte Carlo outputs into a two-page markdown memo:
+every number traced to a model output, the downside taken as seriously as the
+upside, and a recommendation that follows from the analysis. If no admissible
+structure exists the memo says so and names the binding constraint.
 """
 
 from __future__ import annotations
@@ -177,7 +175,7 @@ Value creation of {cur} {_m(at['total_profit'])}m decomposes as:
 | Debt paydown & cash build | {_m(at['debt_paydown'])} |
 | Fees | {_m(at['fees'])} |
 
-Returns are earned the honest way — growth and deleveraging, not multiple arbitrage.
+No multiple expansion is assumed, so all profit comes from growth and deleveraging.
 
 ## 5. Downside analysis
 
@@ -205,8 +203,8 @@ net-leverage cushion **{min_lev_headroom:.2f}x** over the hold.
 
 Proceed on the recommended structure: {o.leverage:.2f}x at {o.mix:.0%} senior mix. It is the highest-IRR
 structure that remains covenant-compliant in every year of the base case AND survives the stressed downside
-with the equity intact. Leverage beyond this buys basis points of IRR at the cost of survivability — a trade
-this committee should decline.
+with the equity intact. Additional leverage beyond this point adds little IRR and fails the downside test;
+we do not recommend it.
 """
 
 

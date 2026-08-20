@@ -175,7 +175,7 @@ def heatmap_tearsheet(opt: OptimizationResult) -> go.Figure:
     fig = go.Figure(
         go.Heatmap(
             z=z,
-            x=[f"{lv:.2f}" for lv in levs],
+            x=levs,  # numeric axis: lets dtick thin the tick labels
             y=[f"{mx:.0%}" for mx in mixes],
             text=cell,
             texttemplate="%{text}",
@@ -210,8 +210,12 @@ def heatmap_tearsheet(opt: OptimizationResult) -> go.Figure:
             len=0.92,
         )
     )
+    # Label every 1.0x tick, not every 0.25x grid point — 21 labels read as noise.
     fig.update_xaxes(
-        title=dict(text="TOTAL LEVERAGE (× EBITDA)", font=dict(size=9)), tickfont=dict(size=8)
+        title=dict(text="TOTAL LEVERAGE (× EBITDA)", font=dict(size=9)),
+        tickfont=dict(size=8),
+        dtick=1.0,
+        tickformat=".1f",
     )
     fig.update_yaxes(title=dict(text="SENIOR MIX", font=dict(size=9)), tickfont=dict(size=8))
     return fig
@@ -741,19 +745,19 @@ def main() -> None:
     junior_turns = o.leverage - senior_turns
 
     # ---------------- Tearsheet ----------------
-    rec = (
+    st.markdown(
         f'<div class="rec-line">OPTIMAL STRUCTURE — <b>{o.leverage:.2f}×</b> TOTAL LEVERAGE · '
         f"{senior_turns:.1f}/{junior_turns:.1f} SR/JR · IRR <b>{fpct(base.irr)}</b> · MOIC "
         f"<b>{fmult(base.moic)}</b> · SURVIVES STRESS "
-        f"(−{assumptions.stress_growth_haircut:.0%} GROWTH, −{assumptions.stress_exit_multiple_shock:.1f}× EXIT)"
+        f"(−{assumptions.stress_growth_haircut:.0%} GROWTH, −{assumptions.stress_exit_multiple_shock:.1f}× EXIT)</div>",
+        unsafe_allow_html=True,
     )
     if opt.naive is not None and opt.naive_gap_irr is not None and opt.naive_gap_irr > 1e-9:
-        rec += (
-            f' &nbsp;&nbsp;<span class="warn">▲ NAIVE {opt.naive.leverage:.2f}× @ '
-            f"{fpct(opt.naive.base.irr)} FAILS STRESS — SURVIVABILITY COST {fpct(opt.naive_gap_irr)}</span>"
+        st.markdown(
+            f'<div class="rec-line"><span class="warn">▲ NAIVE MAX-IRR {opt.naive.leverage:.2f}× @ '
+            f"{fpct(opt.naive.base.irr)} FAILS STRESS — SURVIVABILITY COST {fpct(opt.naive_gap_irr)}</span></div>",
+            unsafe_allow_html=True,
         )
-    rec += "</div>"
-    st.markdown(rec, unsafe_allow_html=True)
     if opt.on_boundary:
         st.info(f"GRID-BOUNDARY DISCLOSURE — {opt.boundary_note}")
 
@@ -797,11 +801,12 @@ def main() -> None:
     main_col, side_col = st.columns([2.1, 1.0])
     with main_col:
         with st.container(border=True):
-            st.plotly_chart(heatmap_tearsheet(opt), width="stretch")
+            st.plotly_chart(heatmap_tearsheet(opt), use_container_width=True)
     with side_col:
         with st.container(border=True):
             st.plotly_chart(
-                cap_stack_chart(o.stack, base.entry["equity"], company.currency), width="stretch"
+                cap_stack_chart(o.stack, base.entry["equity"], company.currency),
+                use_container_width=True,
             )
             st.markdown('<div class="panel-title">Sources &amp; Uses</div>', unsafe_allow_html=True)
             st.markdown(
@@ -811,10 +816,10 @@ def main() -> None:
     low_left, low_right = st.columns(2)
     with low_left:
         with st.container(border=True):
-            st.plotly_chart(paydown_chart(base.yearly, o.stack), width="stretch")
+            st.plotly_chart(paydown_chart(base.yearly, o.stack), use_container_width=True)
     with low_right:
         with st.container(border=True):
-            st.plotly_chart(attribution_waterfall(base.attribution), width="stretch")
+            st.plotly_chart(attribution_waterfall(base.attribution), use_container_width=True)
 
     with st.container(border=True):
         st.markdown(
@@ -831,7 +836,7 @@ def main() -> None:
             frontier_chart(
                 res["frontier"], res["opt_mc"], res["naive_mc"], _survivable_boundary(opt, res)
             ),
-            width="stretch",
+            use_container_width=True,
         )
         st.caption(
             f"Frontier: {FRONTIER_MC_DRAWS:,} MC draws per leverage level at the optimum's senior mix; "
@@ -850,7 +855,7 @@ def main() -> None:
     mc_left, mc_right = st.columns([1.6, 1.0])
     with mc_left:
         with st.container(border=True):
-            st.plotly_chart(mc_histogram(mc), width="stretch")
+            st.plotly_chart(mc_histogram(mc), use_container_width=True)
     with mc_right:
         stress = o.stress
         comp_rows = [
@@ -916,7 +921,7 @@ def main() -> None:
             f" @ {fpct(assumptions.base_rate, 2)} BASE &nbsp;·&nbsp; IC MEMO ON ITS OWN PAGE (SIDEBAR NAV)</div>",
             unsafe_allow_html=True,
         )
-        st.plotly_chart(covenant_chart(base.yearly), width="stretch")
+        st.plotly_chart(covenant_chart(base.yearly), use_container_width=True)
         st.markdown('<div class="panel-title">Full yearly waterfall</div>', unsafe_allow_html=True)
         show = base.yearly.copy()
         money_cols = [
@@ -925,7 +930,7 @@ def main() -> None:
             if c not in ("year", "covenant_breach") and not c.startswith(("coverage", "leverage"))
         ]
         show[money_cols] = show[money_cols].round(1)
-        st.dataframe(show, width="stretch", hide_index=True)
+        st.dataframe(show, use_container_width=True, hide_index=True)
 
 
 def _survivable_boundary(opt: OptimizationResult, res: dict) -> float:

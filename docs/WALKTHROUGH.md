@@ -26,7 +26,7 @@ run at maximum debt capacity. Three forces create an **interior optimum**:
 The optimizer therefore maximizes base-case IRR **subject to** surviving a
 stressed downside and satisfying every covenant in every year. The headline
 output is the gap between the naive max-IRR structure and the survivable
-optimum: leverage you cannot survive is not leverage you own.
+optimum — how much IRR you give up to own a structure that survives.
 
 ---
 
@@ -211,14 +211,14 @@ risk-return optimization**, not IRR maximization.
 
 Three things to say about it in an interview:
 
-1. **Return is monotone in leverage; survival is not.** Median IRR climbs
-   steadily while distress probability is near-zero — then the distress curve
-   goes vertical once coverage and the leverage covenant start binding across
-   the draw distribution. The skill is stopping before the cliff.
-2. **The naive max-IRR point sits past the cliff edge.** It looks better on
-   every headline metric and loses the company in a recession. The gap between
-   it and the starred optimum — a few tenths of a point of IRR — is the price
-   of survivability, and it is the single most important number in the tool.
+1. **Return rises steadily with leverage; survival does not.** Median IRR
+   climbs while distress probability stays near zero — then distress rises
+   sharply once coverage and the leverage covenant start binding across the
+   draw distribution. The practical conclusion: stop before distress turns up.
+2. **The naive max-IRR point sits past that edge.** It looks better on every
+   headline metric and loses the company in a recession. The gap between it
+   and the starred optimum — a few tenths of a point of IRR — is the price of
+   survivability, and it is the single most important number in the tool.
 3. **The frontier is conditional on survival.** IRR statistics are computed
    over draws that reach exit (wiped equity contributes −100%); distressed
    draws are reported through P(distress), not silently averaged in.
