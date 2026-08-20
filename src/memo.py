@@ -65,18 +65,25 @@ upside beyond the {company.growth:.1%} underwritten growth, or walk away.
         ("Transaction & financing fees", e["fees"]),
         ("**Total uses**", e["ev"] + e["fees"]),
     ]
-    sources_lines = [(f"{t.tranche.name} ({t.turns:.2f}x @ {_rate_str(t, a)})", t.amount) for t in o.stack]
+    sources_lines = [
+        (f"{t.tranche.name} ({t.turns:.2f}x @ {_rate_str(t, a)})", t.amount) for t in o.stack
+    ]
     sources_lines.append(("Sponsor equity", e["equity"]))
     sources_lines.append(("**Total sources**", e["total_debt"] + e["equity"]))
     su_rows = ["| Uses | | Sources | |", "|---|---:|---|---:|"]
     for i in range(max(len(uses_lines), len(sources_lines))):
         u = uses_lines[i] if i < len(uses_lines) else ("", "")
         s = sources_lines[i] if i < len(sources_lines) else ("", "")
-        su_rows.append(f"| {u[0]} | {_m(u[1]) if u[0] else ''} | {s[0]} | {_m(s[1]) if s[0] else ''} |")
+        su_rows.append(
+            f"| {u[0]} | {_m(u[1]) if u[0] else ''} | {s[0]} | {_m(s[1]) if s[0] else ''} |"
+        )
     sources_uses = "\n".join(su_rows)
 
     # --- Tranche table ---
-    tranche_rows = ["| Tranche | Turns | Amount | Pricing | Amortization | Seniority |", "|---|---:|---:|---|---|---|"]
+    tranche_rows = [
+        "| Tranche | Turns | Amount | Pricing | Amortization | Seniority |",
+        "|---|---:|---:|---|---|---|",
+    ]
     for t in o.stack:
         amort = f"{t.tranche.amort_pct:.0%}/yr" if t.tranche.amort_pct > 0 else "Bullet"
         tranche_rows.append(

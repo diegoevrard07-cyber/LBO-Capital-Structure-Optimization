@@ -21,8 +21,10 @@ st.markdown(
 )
 
 if "results" not in st.session_state:
-    st.info("No deal in memory — run the optimizer on the main page first "
-            "(fetch a target, press RUN OPTIMIZATION), then return here.")
+    st.info(
+        "No deal in memory — run the optimizer on the main page first "
+        "(fetch a target, press RUN OPTIMIZATION), then return here."
+    )
     st.stop()
 
 res = st.session_state.results
