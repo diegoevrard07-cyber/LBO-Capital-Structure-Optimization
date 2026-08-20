@@ -4,23 +4,24 @@
 ![Tests](https://github.com/diegoevrard07-cyber/LBO-Capital-Structure-Optimization/actions/workflows/tests.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-**An optimizer that searches over LBO capital structures — how much debt, in which
-tranches — to maximize the private-equity sponsor's return (IRR), subject to the
-constraints that actually kill deals: leverage limits, interest-coverage and
-leverage covenants, and survival of a stressed downside.** Point it at any listed
-company; it pulls live fundamentals and returns the optimal debt stack, the full
-risk-return frontier, and a draft IC memo.
+**In plain English:** when a private-equity firm buys a company, it borrows most of
+the money. This tool answers the obvious follow-up — *how much* should it borrow,
+and in what mix of cheap vs. expensive debt, to earn the best return without losing
+the company in a recession? It works on any listed company: type a ticker, get an
+answer.
+
+**Technically:** an optimizer that searches over LBO capital structures — how much
+debt, in which tranches — to maximize the private-equity sponsor's return (IRR),
+subject to the constraints that actually kill deals: leverage limits,
+interest-coverage and leverage covenants, and survival of a stressed downside. Live
+fundamentals come from Yahoo Finance; outputs include the optimal debt stack, the
+full risk-return frontier, and a draft investment-committee memo.
 
 ![Deal tearsheet](docs/img/tearsheet.png)
 
-*To re-capture: run the app (Quickstart below), fetch `TSCO.L`, press **Run
-optimization**, and screenshot the landing page at ~1440px browser width — the dark
-theme is locked in `.streamlit/config.toml`, so output is consistent. Secondary
-shots: the optimizer's IRR grid ([docs/img/heatmap.png](docs/img/heatmap.png)) and
-the efficient frontier ([docs/img/frontier.png](docs/img/frontier.png)).*
-
-![IRR sensitivity grid](docs/img/heatmap.png)
-![Efficient frontier](docs/img/frontier.png)
+*The deal tearsheet for Tesco plc: recommended structure and key return metrics up
+top, the optimizer's IRR grid as the main panel, then capital structure, debt
+paydown, and where the profit comes from.*
 
 ## Why this exists
 
@@ -94,6 +95,12 @@ than hiding them); the stress case is one deterministic scenario, not a statemen
 about all recessions; and IRR-maximization subject to survival is a sponsor's
 objective — a lender or an LP would weight the constraints differently.
 
+![IRR sensitivity grid](docs/img/heatmap.png)
+
+*The search space: base-case IRR at every leverage × seniority combination. Dark
+cells are structures that breach a covenant or fail the stress test — hover any cell
+for the specific reason.*
+
 ## Example result — Tesco plc (TSCO.L)
 
 Live fundamentals at capture: EBITDA £5,054mm, revenue £73.7bn, market EV/EBITDA
@@ -112,6 +119,26 @@ the £17.9bn equity profit decomposes into £11.2bn EBITDA growth + £8.0bn debt
 paydown + £0 multiple expansion − £1.4bn fees.
 
 *(Figures move with live market data; re-run for the current answer.)*
+
+![Efficient frontier](docs/img/frontier.png)
+
+*The efficient frontier: median IRR against probability of distress as leverage
+rises. Star = the recommended structure; diamond = the highest-IRR structure, which
+fails the downside test.*
+
+## Skills this demonstrates
+
+- **Software engineering** — typed, modular Python (dataclasses, numpy, pandas);
+  11-test pytest suite; GitHub Actions CI; pinned, reproducible dependencies.
+- **Financial modelling** — sources & uses, a multi-tranche debt waterfall with
+  cash sweep, covenant testing, IRR/MOIC, and a value-creation bridge, built
+  year-by-year the way a deal team's Excel model works.
+- **Data work** — live fundamentals from a free API (yfinance), with every
+  fallback and assumption disclosed rather than silently substituted.
+- **Quantitative risk** — seeded Monte Carlo over growth, exit multiple, and
+  interest rates; results read as probabilities, not point estimates.
+- **Communication** — the app writes a draft IC memo from its own outputs; the
+  full mechanism write-up is in [docs/WALKTHROUGH.md](docs/WALKTHROUGH.md).
 
 ## Quickstart
 

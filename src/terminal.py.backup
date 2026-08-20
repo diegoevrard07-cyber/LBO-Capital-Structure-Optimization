@@ -22,8 +22,6 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 #MainMenu, footer, [data-testid="stDecoration"], .stAppDeployButton,
 [data-testid="stToolbarActions"] { display: none !important; }
 [data-testid="stHeader"] { background: transparent !important; pointer-events: auto !important; }
-[data-testid="stHeader"] button, [data-testid="stHeader"] [role="button"] { pointer-events: auto !important; } 
-[data-testid="stHeader"] * { pointer-events: auto !important; }
 
 /* density */
 .block-container { padding: 0.6rem 0.9rem 1rem !important; max-width: 100% !important; }
