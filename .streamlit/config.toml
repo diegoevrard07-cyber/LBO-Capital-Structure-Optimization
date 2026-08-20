@@ -1,0 +1,18 @@
+# Locked dark theme so the terminal aesthetic is consistent across machines
+# and screenshots. The heavy lifting (density, fonts, chrome hiding) is done
+# by the CSS injected in app.py; this file sets the base palette Streamlit
+# uses for its own chrome (sidebar, widgets, tabs).
+
+[theme]
+base = "dark"
+primaryColor = "#ff9f1c"
+backgroundColor = "#0a0e14"
+secondaryBackgroundColor = "#11161f"
+textColor = "#d7dce3"
+font = "monospace"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
